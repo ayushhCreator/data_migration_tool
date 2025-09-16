@@ -204,7 +204,6 @@ class CSVConnector:
             raise Exception(error_msg)
 
 
-    
 
     def _get_system_user(self):
         """Get a valid system user for background operations"""

@@ -3,8 +3,8 @@ import frappe
 
 app_name = "data_migration_tool"
 app_title = "Data Migration Tool"
-app_publisher = "Ayush"
-app_description = "Migrate Data"
+app_publisher = "Ayush Raj"
+app_description = "Migrate Data from different sources to Frappe/ERPNext"
 app_email = "araj09510@gmail.com"
 app_license = "mit"
 
@@ -221,6 +221,19 @@ website_route_rules = [
 #         ]
 #     }
 # }
+
+# Document Events (in hooks.py)
+doc_events = {
+    "Your DocType": {
+        "on_update": "your.module.your_function"
+    }
+}
+
+# Your function (must accept doc, method)
+def your_function(doc, method):
+    # Your code here
+    pass
+
 
 # Background job context setup
 def setup_job_context():

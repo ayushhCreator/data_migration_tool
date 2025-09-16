@@ -5,6 +5,7 @@ import frappe
 from frappe.utils import now, add_days, get_datetime
 from pathlib import Path
 from typing import Dict, Any
+import hashlib
 import json
 from datetime import datetime
 import numpy as np
@@ -111,50 +112,33 @@ def clean_doctype_name(filename: str) -> str:
     return clean_name
 
 def process_csv_files_with_jit():
-    """ENHANCED: CSV processing with proper user context and improved error handling"""
+    """ENHANCED: CSV processing with schema recognition"""
     from data_migration_tool.data_migration.connectors.csv_connector import CSVConnector
     from data_migration_tool.data_migration.mappers.doctype_creator import DynamicDocTypeCreator
     from data_migration_tool.data_migration.utils.logger_config import migration_logger
     
-    # Set proper user context at the very beginning
+    # Set proper user context
     try:
-        # Get system managers using SQL query instead of frappe.get_system_managers()
         system_managers = frappe.db.sql("""
-            SELECT DISTINCT u.name 
-            FROM `tabUser` u
+            SELECT DISTINCT u.name FROM `tabUser` u
             INNER JOIN `tabHas Role` hr ON u.name = hr.parent
-            WHERE hr.role = 'System Manager' 
-            AND u.enabled = 1 
-            AND u.name != 'Guest'
+            WHERE hr.role = 'System Manager' AND u.enabled = 1 AND u.name != 'Guest'
             LIMIT 1
         """, as_dict=True)
         
         if system_managers:
             frappe.set_user(system_managers[0].name)
-            migration_logger.logger.info(f"🔧 Set user context to: {system_managers[0].name}")
         else:
             frappe.set_user('Administrator')
-            migration_logger.logger.info(f"🔧 Set user context to: Administrator")
-    except Exception as user_error:
-        migration_logger.logger.warning(f"⚠️ Could not set user context: {str(user_error)}")
+    except Exception:
         frappe.set_user('Administrator')
     
     try:
-        migration_logger.logger.info("🚀 Starting JIT CSV file processing")
+        migration_logger.logger.info("🚀 Starting enhanced CSV processing with schema recognition")
         
         # Get Migration Settings
-        try:
-            settings = frappe.get_single('Migration Settings')
-        except frappe.DoesNotExistError:
-            migration_logger.logger.warning("⚠️ Migration Settings not found, skipping JIT CSV processing")
-            return
-        
-        if not settings.enable_csv_processing:
-            migration_logger.logger.info("📄 CSV processing disabled")
-            return
-        
-        if not settings.csv_watch_directory:
-            migration_logger.logger.error("💥 CSV Watch Directory not configured")
+        settings = frappe.get_single('Migration Settings')
+        if not settings.enable_csv_processing or not settings.csv_watch_directory:
             return
         
         csv_connector = CSVConnector(migration_logger)
@@ -169,178 +153,216 @@ def process_csv_files_with_jit():
         for directory in [processed_dir, error_dir, pending_dir]:
             os.makedirs(directory, exist_ok=True)
         
-        if not os.path.exists(watch_dir):
-            migration_logger.logger.error(f"💥 Watch directory does not exist: {watch_dir}")
-            return
-        
         # Get processable files
         processable_files = []
         for filename in os.listdir(watch_dir):
-            if filename.startswith('.'):
+            if filename.startswith('.') or not os.path.isfile(os.path.join(watch_dir, filename)):
                 continue
-            file_path = os.path.join(watch_dir, filename)
-            if not os.path.isfile(file_path):
-                continue
-            file_ext = Path(file_path).suffix.lower()
-            if file_ext not in csv_connector.supported_formats:
-                continue
-            processable_files.append((filename, file_path))
+            if Path(filename).suffix.lower() in csv_connector.supported_formats:
+                processable_files.append((filename, os.path.join(watch_dir, filename)))
         
         if not processable_files:
             migration_logger.logger.info("📂 No CSV files found to process")
             return
         
-        migration_logger.logger.info(f"📋 Found {len(processable_files)} files for JIT processing")
+        migration_logger.logger.info(f"📋 Found {len(processable_files)} files for processing")
         
         processed_count = 0
         error_count = 0
         pending_count = 0
         
-        # Process each file with enhanced error handling
         for filename, file_path in processable_files:
             try:
-                migration_logger.logger.info(f"📄 Starting JIT processing for: {filename}")
+                migration_logger.logger.info(f"📄 Processing file with schema recognition: {filename}")
                 
-                # Step 1: Read as strings
+                # Step 1: Read CSV and analyze headers
                 df = csv_connector.read_file_as_strings(file_path)
                 if df.empty:
                     migration_logger.logger.warning(f"⚠️ Empty file: {filename}")
                     error_count += 1
                     continue
                 
-                # Step 2: Use enhanced DocType name cleaning
-                target_doctype = clean_doctype_name(filename)
-                migration_logger.logger.info(f"🎯 Determined target DocType: {target_doctype}")
+                headers = list(df.columns)
+                data_sample = get_data_sample_from_df(df)
                 
-                # Step 3: Check if DocType exists, if not trigger approval workflow
-                if not frappe.db.exists('DocType', target_doctype):
-                    migration_logger.logger.info(f"❓ DocType '{target_doctype}' does not exist - checking approval settings")
+                migration_logger.logger.info(f"📊 Detected headers: {headers}")
+                
+                # Step 2: ENHANCED - Check for existing schema match
+                existing_doctype, registry_id = find_existing_doctype_by_schema(headers, data_sample)
+                
+                if existing_doctype:
+                    migration_logger.logger.info(f"✅ Found matching schema! Mapping to existing DocType: {existing_doctype}")
+                    target_doctype = existing_doctype
                     
-                    if getattr(settings, 'require_user_permission_for_doctype_creation', True):
-                        # Check if request already exists for this file
-                        existing_request = frappe.db.exists('DocType Creation Request', {
-                            'source_file': filename,
-                            'status': ['in', ['Pending', 'Approved', 'Redirected']]
-                        })
+                    # Process directly - no approval needed
+                    try:
+                        # Store and process data with intelligent merging
+                        stored_count = csv_connector.store_raw_data(df, filename, target_doctype)
+                        migration_logger.logger.info(f"📦 Stored {stored_count} records for processing")
                         
-                        if not existing_request:
-                            # Analyze CSV structure for request
-                            migration_logger.logger.info(f"📊 Analyzing CSV structure for approval request")
-                            field_analysis = mapper.analyze_csv_structure(df)
-                            
-                            # Send user permission request
-                            request_id = send_doctype_creation_request(filename, target_doctype, field_analysis)
-                            migration_logger.logger.info(f"📋 Sent user permission request {request_id} for DocType: {target_doctype}")
+                        # Process with enhanced merging logic
+                        total_results = process_data_with_merge_logic(
+                            csv_connector, target_doctype, df, settings, migration_logger
+                        )
+                        
+                        if total_results["success"] > 0 or total_results["updated"] > 0:
+                            processed_path = os.path.join(processed_dir, filename)
+                            shutil.move(file_path, processed_path)
+                            migration_logger.logger.info(f"✅ Successfully processed {filename} with existing schema: {total_results}")
+                            processed_count += 1
                         else:
-                            migration_logger.logger.info(f"📋 Approval request already exists for {filename}")
-                        
-                        # Move file to pending directory
-                        pending_path = os.path.join(pending_dir, filename)
-                        shutil.move(file_path, pending_path)
-                        pending_count += 1
-                        migration_logger.logger.info(f"📁 Moved {filename} to pending directory")
-                        continue
+                            error_path = os.path.join(error_dir, filename)
+                            shutil.move(file_path, error_path)
+                            migration_logger.logger.warning(f"⚠️ No successful operations for {filename}")
+                            error_count += 1
                     
-                    elif getattr(settings, 'auto_create_doctypes', False):
-                        # Auto-create mode
-                        try:
-                            field_analysis = mapper.analyze_csv_structure(df)
-                            created_doctype = mapper.create_doctype_from_analysis(field_analysis, target_doctype)
-                            migration_logger.logger.info(f"✅ Auto-created DocType: {created_doctype}")
-                            target_doctype = created_doctype
-                        except Exception as e:
-                            migration_logger.logger.error(f"❌ Failed to auto-create DocType {target_doctype}: {str(e)}")
+                    except Exception as e:
+                        migration_logger.logger.error(f"❌ Failed to process existing schema file {filename}: {str(e)}")
+                        error_path = os.path.join(error_dir, filename)
+                        shutil.move(file_path, error_path)
+                        error_count += 1
+                
+                else:
+                    # Step 3: No existing schema - proceed with original logic
+                    migration_logger.logger.info(f"🔍 No matching schema found - checking DocType creation options")
+                    
+                    target_doctype = clean_doctype_name(filename)
+                    
+                    if not frappe.db.exists('DocType', target_doctype):
+                        if getattr(settings, 'require_user_permission_for_doctype_creation', True):
+                            # Check for existing request
+                            existing_request = frappe.db.exists('DocType Creation Request', {
+                                'source_file': filename,
+                                'status': ['in', ['Pending', 'Approved', 'Redirected']]
+                            })
+                            
+                            if not existing_request:
+                                # Create approval request
+                                field_analysis = mapper.analyze_csv_structure(df)
+                                request_id = send_doctype_creation_request(filename, target_doctype, field_analysis)
+                                migration_logger.logger.info(f"📋 Sent approval request {request_id} for new schema")
+                            
+                            # Move to pending
+                            pending_path = os.path.join(pending_dir, filename)
+                            shutil.move(file_path, pending_path)
+                            pending_count += 1
+                            continue
+                        
+                        elif getattr(settings, 'auto_create_doctypes', False):
+                            # Auto-create DocType and register schema
+                            try:
+                                field_analysis = mapper.analyze_csv_structure(df)
+                                created_doctype = mapper.create_doctype_from_analysis(field_analysis, target_doctype)
+                                migration_logger.logger.info(f"✅ Auto-created DocType: {created_doctype}")
+                                
+                                # Register the new schema
+                                register_csv_schema(filename, headers, created_doctype, data_sample)
+                                migration_logger.logger.info(f"📝 Registered new schema for future recognition")
+                                
+                                target_doctype = created_doctype
+                            except Exception as e:
+                                migration_logger.logger.error(f"❌ Failed to auto-create DocType: {str(e)}")
+                                error_path = os.path.join(error_dir, filename)
+                                shutil.move(file_path, error_path)
+                                error_count += 1
+                                continue
+                    
+                    # Process the new DocType
+                    try:
+                        stored_count = csv_connector.store_raw_data(df, filename, target_doctype)
+                        total_results = process_data_with_merge_logic(
+                            csv_connector, target_doctype, df, settings, migration_logger
+                        )
+                        
+                        if total_results["success"] > 0:
+                            processed_path = os.path.join(processed_dir, filename)
+                            shutil.move(file_path, processed_path)
+                            processed_count += 1
+                        else:
                             error_path = os.path.join(error_dir, filename)
                             shutil.move(file_path, error_path)
                             error_count += 1
-                            continue
-                    else:
-                        # Neither approval nor auto-create enabled
-                        migration_logger.logger.error(f"❌ DocType {target_doctype} does not exist and creation not enabled")
+                            
+                    except Exception as e:
+                        migration_logger.logger.error(f"❌ Processing failed: {str(e)}")
                         error_path = os.path.join(error_dir, filename)
                         shutil.move(file_path, error_path)
                         error_count += 1
-                        continue
-                
-                # Step 4: Process if DocType exists
-                migration_logger.logger.info(f"✅ DocType '{target_doctype}' exists - proceeding with data import")
-                
-                try:
-                    stored_count = csv_connector.store_raw_data(df, filename, target_doctype)
-                    migration_logger.logger.info(f"📦 Stored {stored_count} raw records for JIT processing")
-                    
-                    # Step 5: Process with JIT conversion in batches
-                    batch_size = int(getattr(settings, 'csv_chunk_size', 1000))
-                    total_results = {"success": 0, "failed": 0, "skipped": 0}
-                    
-                    migration_logger.logger.info(f"🔄 Starting JIT batch processing with batch size: {batch_size}")
-                    
-                    batch_count = 0
-                    max_batches = 100
-                    
-                    while batch_count < max_batches:
-                        batch_count += 1
-                        migration_logger.logger.info(f"📊 Processing JIT batch {batch_count}")
-                        
-                        try:
-                            batch_results = csv_connector.process_buffered_data(target_doctype, batch_size)
-                        except Exception as e:
-                            migration_logger.logger.error(f"❌ JIT batch processing failed: {str(e)}")
-                            break
-                        
-                        for key in total_results:
-                            total_results[key] += batch_results[key]
-                        
-                        migration_logger.logger.info(f"📈 Batch {batch_count} results: {batch_results}")
-                        
-                        if sum(batch_results.values()) == 0:
-                            migration_logger.logger.info("📭 No more records to process")
-                            break
-                    
-                    # Move file based on results
-                    if total_results["success"] > 0:
-                        processed_path = os.path.join(processed_dir, filename)
-                        shutil.move(file_path, processed_path)
-                        migration_logger.logger.info(f"✅ JIT processing completed for {filename}: {total_results}")
-                        processed_count += 1
-                    else:
-                        error_path = os.path.join(error_dir, filename)
-                        shutil.move(file_path, error_path)
-                        migration_logger.logger.warning(f"⚠️ No successful records for {filename}: {total_results}")
-                        error_count += 1
-                        
-                except Exception as e:
-                    migration_logger.logger.error(f"❌ Failed to store/process raw data: {str(e)}")
-                    error_path = os.path.join(error_dir, filename)
-                    shutil.move(file_path, error_path)
-                    error_count += 1
-                    continue
                 
             except Exception as e:
-                migration_logger.logger.error(f"❌ JIT processing failed for {filename}: {str(e)}")
-                try:
-                    error_path = os.path.join(error_dir, filename)
-                    if os.path.exists(file_path):
-                        shutil.move(file_path, error_path)
-                except Exception as move_error:
-                    migration_logger.logger.error(f"❌ Failed to move error file: {str(move_error)}")
+                migration_logger.logger.error(f"❌ Failed to process {filename}: {str(e)}")
                 error_count += 1
         
-        # Summary logging
-        migration_logger.logger.info(f"🎉 JIT CSV processing completed - Processed: {processed_count}, Errors: {error_count}, Pending: {pending_count}")
+        migration_logger.logger.info(f"🎉 Enhanced processing completed - Processed: {processed_count}, Errors: {error_count}, Pending: {pending_count}")
         
-        # Cleanup old buffer records
-        if processed_count > 0:
-            try:
-                csv_connector.cleanup_processed_buffer(days_old=7)
-            except Exception as cleanup_error:
-                migration_logger.logger.warning(f"⚠️ Buffer cleanup failed: {str(cleanup_error)}")
+    except Exception as e:
+        migration_logger.logger.error(f"❌ Enhanced CSV processing failed: {str(e)}")
+
+def process_data_with_merge_logic(csv_connector, target_doctype, df, settings, migration_logger):
+    """
+    Process data with intelligent insert/update logic
+    """
+    batch_size = int(getattr(settings, 'csv_chunk_size', 1000))
+    total_results = {"success": 0, "failed": 0, "skipped": 0, "updated": 0}
+    
+    # Get existing records to determine insert vs update
+    existing_records = {}
+    try:
+        # Try to find a unique identifier field
+        doctype_meta = frappe.get_meta(target_doctype)
+        unique_fields = []
+        
+        for field in doctype_meta.fields:
+            if field.unique or field.fieldname in ['name', 'id', 'code', 'email']:
+                unique_fields.append(field.fieldname)
+        
+        if unique_fields:
+            # Use first unique field as identifier
+            identifier_field = unique_fields[0]
+            migration_logger.logger.info(f"🔍 Using '{identifier_field}' as unique identifier for merge operations")
+            
+            # Get all existing values for this field
+            existing_values = frappe.db.get_all(
+                target_doctype, 
+                fields=['name', identifier_field],
+                as_dict=True
+            )
+            
+            for record in existing_values:
+                existing_records[str(record[identifier_field]).strip().lower()] = record.name
     
     except Exception as e:
-        migration_logger.logger.error(f"❌ JIT CSV processing failed: {str(e)}")
+        migration_logger.logger.warning(f"⚠️ Could not determine merge strategy: {str(e)} - will insert only")
+    
+    # Process in batches with merge logic
+    batch_count = 0
+    max_batches = 100
+    
+    while batch_count < max_batches:
+        batch_count += 1
+        
+        # Enhanced processing with merge capabilities
+        if existing_records:
+            batch_results = csv_connector.process_buffered_data_with_merge(
+                target_doctype, batch_size, existing_records
+            )
+        else:
+            batch_results = csv_connector.process_buffered_data(target_doctype, batch_size)
+        
+        for key in total_results:
+            if key in batch_results:
+                total_results[key] += batch_results[key]
+        
+        migration_logger.logger.info(f"📈 Batch {batch_count} results: {batch_results}")
+        
+        if sum(batch_results.values()) == 0:
+            break
+    
+    return total_results
+
 
 def check_pending_requests_and_process():
-    """ENHANCED: Check for approved requests with document conflict fix"""
+    """FIXED: Check for approved requests with correct exception handling"""
     from data_migration_tool.data_migration.mappers.doctype_creator import DynamicDocTypeCreator
     from data_migration_tool.data_migration.connectors.csv_connector import CSVConnector
     from data_migration_tool.data_migration.utils.logger_config import migration_logger
@@ -382,16 +404,15 @@ def check_pending_requests_and_process():
         
         for request in pending_requests:
             try:
-                # FIXED: Get fresh document instance and reload to prevent conflicts
+                # Get fresh document instance
                 request_doc = frappe.get_doc('DocType Creation Request', request.name)
-                request_doc.reload()
                 
                 target_doctype = request_doc.final_doctype or request_doc.suggested_doctype
                 csv_filename = request_doc.source_file
                 
                 migration_logger.logger.info(f"🔄 Processing approved request: {csv_filename} → {target_doctype}")
                 
-                # Find the CSV file in multiple possible locations
+                # Find CSV file
                 search_dirs = [
                     pending_dir,
                     watch_dir,
@@ -410,14 +431,15 @@ def check_pending_requests_and_process():
                 
                 if not csv_file_path:
                     migration_logger.logger.error(f"⚠️ CSV file not found: {csv_filename}")
+                    # FIXED: Simple update without complex exception handling
                     try:
-                        request_doc.reload()
-                        request_doc.status = 'Failed'
-                        request_doc.created_doctype = 'File Not Found'
-                        request_doc.save(ignore_permissions=True)
+                        frappe.db.set_value('DocType Creation Request', request_doc.name, {
+                            'status': 'Failed',
+                            'created_doctype': 'File Not Found'
+                        })
                         frappe.db.commit()
-                    except frappe.exceptions.DocumentModifiedError:
-                        migration_logger.logger.warning(f"⚠️ Document conflict updating failed status for {request_doc.name}")
+                    except Exception as update_error:
+                        migration_logger.logger.warning(f"⚠️ Could not update failed status: {str(update_error)}")
                     continue
                 
                 # Create or confirm DocType exists
@@ -426,45 +448,36 @@ def check_pending_requests_and_process():
                         field_analysis = json.loads(request_doc.field_analysis)
                         created_doctype = mapper.create_doctype_from_analysis(field_analysis, target_doctype)
                         migration_logger.logger.info(f"✅ Created DocType: {created_doctype}")
+                        target_doctype = created_doctype
                         
-                        # Update with conflict handling
-                        try:
-                            request_doc.reload()
-                            request_doc.created_doctype = created_doctype
-                            target_doctype = created_doctype
-                        except frappe.exceptions.DocumentModifiedError:
-                            migration_logger.logger.warning(f"⚠️ Document conflict - DocType created but status not updated")
-                            target_doctype = created_doctype
-                            
+                        # Update created_doctype using db.set_value to avoid conflicts
+                        frappe.db.set_value('DocType Creation Request', request_doc.name, 'created_doctype', created_doctype)
+                        
                     except Exception as doctype_error:
                         migration_logger.logger.error(f"❌ Failed to create DocType {target_doctype}: {str(doctype_error)}")
                         try:
-                            request_doc.reload()
-                            request_doc.status = 'Failed'
-                            request_doc.created_doctype = f'Creation Failed: {str(doctype_error)[:100]}'
-                            request_doc.save(ignore_permissions=True)
-                        except frappe.exceptions.DocumentModifiedError:
-                            migration_logger.logger.warning(f"⚠️ Document conflict updating error status for {request_doc.name}")
+                            frappe.db.set_value('DocType Creation Request', request_doc.name, {
+                                'status': 'Failed',
+                                'created_doctype': f'Creation Failed: {str(doctype_error)[:100]}'
+                            })
+                        except Exception:
+                            pass
                         continue
                         
                 elif request_doc.status == 'Redirected':
                     if not frappe.db.exists('DocType', target_doctype):
                         migration_logger.logger.error(f"❌ Target DocType {target_doctype} does not exist")
                         try:
-                            request_doc.reload()
-                            request_doc.status = 'Failed'
-                            request_doc.created_doctype = 'Target DocType Not Found'
-                            request_doc.save(ignore_permissions=True)
-                        except frappe.exceptions.DocumentModifiedError:
-                            migration_logger.logger.warning(f"⚠️ Document conflict updating redirect error for {request_doc.name}")
+                            frappe.db.set_value('DocType Creation Request', request_doc.name, {
+                                'status': 'Failed',
+                                'created_doctype': 'Target DocType Not Found'
+                            })
+                        except Exception:
+                            pass
                         continue
                     
                     migration_logger.logger.info(f"🔄 Using existing DocType: {target_doctype}")
-                    try:
-                        request_doc.reload()
-                        request_doc.created_doctype = target_doctype
-                    except frappe.exceptions.DocumentModifiedError:
-                        migration_logger.logger.warning(f"⚠️ Document conflict - using existing DocType but status not updated")
+                    frappe.db.set_value('DocType Creation Request', request_doc.name, 'created_doctype', target_doctype)
                 
                 # Process the CSV file
                 try:
@@ -473,13 +486,10 @@ def check_pending_requests_and_process():
                     df = csv_connector.read_file_as_strings(csv_file_path)
                     if df.empty:
                         migration_logger.logger.warning(f"⚠️ Empty CSV file: {csv_filename}")
-                        try:
-                            request_doc.reload()
-                            request_doc.status = 'Failed'
-                            request_doc.created_doctype = 'Empty File'
-                            request_doc.save(ignore_permissions=True)
-                        except frappe.exceptions.DocumentModifiedError:
-                            migration_logger.logger.warning(f"⚠️ Document conflict updating empty file status")
+                        frappe.db.set_value('DocType Creation Request', request_doc.name, {
+                            'status': 'Failed',
+                            'created_doctype': 'Empty File'
+                        })
                         continue
                     
                     migration_logger.logger.info(f"📊 Loaded {len(df)} rows from {csv_filename}")
@@ -513,18 +523,16 @@ def check_pending_requests_and_process():
                     shutil.move(csv_file_path, processed_path)
                     migration_logger.logger.info(f"📁 Moved file to processed: {processed_path}")
                     
-                    # FIXED: Update request status with conflict handling
+                    # FIXED: Update request status using db.set_value to avoid conflicts
                     try:
-                        request_doc.reload()  # Always reload before save
-                        request_doc.status = 'Completed'
-                        request_doc.processing_results = json.dumps(total_results)
-                        request_doc.save(ignore_permissions=True)
+                        frappe.db.set_value('DocType Creation Request', request_doc.name, {
+                            'status': 'Completed',
+                            'processing_results': json.dumps(total_results)
+                        })
                         frappe.db.commit()
                         migration_logger.logger.info(f"✅ Successfully completed request: {request.name}")
-                    except frappe.exceptions.DocumentModifiedError:
-                        migration_logger.logger.warning(f"⚠️ Document conflict for request {request.name} - processing completed but status not updated")
-                    except Exception as save_error:
-                        migration_logger.logger.error(f"❌ Failed to update request status: {str(save_error)}")
+                    except Exception as update_error:
+                        migration_logger.logger.warning(f"⚠️ Could not update completion status: {str(update_error)} - but processing succeeded")
                     
                     processed_count += 1
                     
@@ -554,12 +562,12 @@ def check_pending_requests_and_process():
                         pass
                     
                     try:
-                        request_doc.reload()
-                        request_doc.status = 'Failed'
-                        request_doc.created_doctype = f'Processing Failed: {str(processing_error)[:100]}'
-                        request_doc.save(ignore_permissions=True)
-                    except frappe.exceptions.DocumentModifiedError:
-                        migration_logger.logger.warning(f"⚠️ Document conflict updating processing error status")
+                        frappe.db.set_value('DocType Creation Request', request_doc.name, {
+                            'status': 'Failed',
+                            'created_doctype': f'Processing Failed: {str(processing_error)[:100]}'
+                        })
+                    except Exception:
+                        pass
                 
             except Exception as e:
                 migration_logger.logger.error(f"❌ Failed to process request {request.name}: {str(e)}")
@@ -655,7 +663,98 @@ def send_doctype_creation_request(filename, target_doctype, field_analysis):
         migration_logger.logger.error(f"❌ Full traceback: {traceback.format_exc()}")
         raise e
 
-# Trigger function for document events
+def compute_schema_fingerprint(headers: list, data_sample: dict = None) -> str:
+    """
+    Compute a unique fingerprint for CSV schema based on headers and data types
+    """
+    # Sort headers to ensure consistent fingerprints regardless of column order
+    sorted_headers = sorted([h.strip().lower() for h in headers])
+    
+    # Create fingerprint from headers
+    headers_string = '|'.join(sorted_headers)
+    
+    # Optionally include data type information for more precision
+    if data_sample:
+        type_info = []
+        for header in sorted_headers:
+            if header in data_sample:
+                sample_value = str(data_sample[header])
+                # Simple type detection
+                if sample_value.isdigit():
+                    type_info.append(f"{header}:int")
+                elif sample_value.replace('.', '').isdigit():
+                    type_info.append(f"{header}:float")
+                else:
+                    type_info.append(f"{header}:string")
+        
+        if type_info:
+            headers_string += '||' + '|'.join(type_info)
+    
+    # Generate MD5 hash
+    return hashlib.md5(headers_string.encode('utf-8')).hexdigest()
+
+def find_existing_doctype_by_schema(headers: list, data_sample: dict = None) -> tuple:
+    """
+    Find existing DocType that matches the CSV schema
+    Returns: (doctype_name, registry_id) or (None, None) if not found
+    """
+    fingerprint = compute_schema_fingerprint(headers, data_sample)
+    
+    # Check registry for existing schema
+    existing_schema = frappe.db.get_value(
+        'CSV Schema Registry',
+        {'schema_fingerprint': fingerprint},
+        ['target_doctype', 'name'],
+        as_dict=True
+    )
+    
+    if existing_schema and frappe.db.exists('DocType', existing_schema.target_doctype):
+        return existing_schema.target_doctype, existing_schema.name
+    
+    return None, None
+
+def register_csv_schema(source_file: str, headers: list, target_doctype: str, data_sample: dict = None):
+    """
+    Register a new CSV schema in the registry
+    """
+    try:
+        fingerprint = compute_schema_fingerprint(headers, data_sample)
+        
+        # Create registry entry
+        registry_doc = frappe.get_doc({
+            'doctype': 'CSV Schema Registry',
+            'source_file': source_file,
+            'schema_fingerprint': fingerprint,
+            'headers_json': json.dumps(headers),
+            'target_doctype': target_doctype,
+            'field_count': len(headers)
+        })
+        
+        registry_doc.insert(ignore_permissions=True, ignore_if_duplicate=True)
+        frappe.db.commit()
+        
+        return registry_doc.name
+        
+    except Exception as e:
+        frappe.log_error(f"Failed to register schema for {source_file}: {str(e)}")
+        return None
+
+def get_data_sample_from_df(df):
+    """
+    Get a representative data sample from DataFrame for type detection
+    """
+    if df.empty:
+        return {}
+    
+    # Get first non-empty row as sample
+    sample = {}
+    for col in df.columns:
+        non_empty_values = df[col].dropna()
+        if len(non_empty_values) > 0:
+            sample[col.strip().lower()] = str(non_empty_values.iloc[0])
+    
+    return sample
+
 def on_doctype_request_update(doc, method):
     """Trigger processing when DocType Creation Request is approved"""
     from data_migration_tool.data_migration.utils.logger_config import migration_logger
