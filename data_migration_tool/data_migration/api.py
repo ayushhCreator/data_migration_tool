@@ -333,3 +333,48 @@ def get_buffer_statistics():
         
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+
+@frappe.whitelist()
+def import_yawlit_services(csv_file_path=None):
+    """API endpoint to trigger Yawlit service import"""
+    try:
+        from data_migration_tool.data_migration.importers.yawlit_importer import YawlitImporter
+        
+        if not csv_file_path:
+            # Look for Yawlit files in upload directory
+            import os
+            from frappe.utils import get_site_path
+            
+            files_dir = get_site_path("private", "files")
+            for file in os.listdir(files_dir):
+                if "yawlit" in file.lower() and "service" in file.lower():
+                    csv_file_path = os.path.join(files_dir, file)
+                    break
+        
+        if not csv_file_path:
+            return {"status": "error", "message": "No Yawlit CSV file found"}
+        
+        importer = YawlitImporter()
+        result = importer.import_from_csv(csv_file_path)
+        
+        return result
+        
+    except Exception as e:
+        frappe.log_error(str(e), "Yawlit Import API Error")
+        return {"status": "error", "message": str(e)}
+
+@frappe.whitelist()
+def get_product_catalog():
+    """Get complete product catalog with relationships"""
+    try:
+        products = frappe.get_all("Product", 
+            fields=["name", "product_name", "service_category", "vehicle_type", 
+                   "service_type", "one_time_price", "is_active"],
+            filters={"is_active": 1}
+        )
+        
+        return {"status": "success", "data": products}
+        
+    except Exception as e:
+        return {"status": "error", "message": str(e)}

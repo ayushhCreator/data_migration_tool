@@ -92,6 +92,64 @@ website_route_rules = [
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
 
+
+
+# Add to existing hooks.py after the existing doctype_js section
+
+# Domain-specific DocTypes
+domains = {
+    "Car Services": "data_migration_tool.domains.car_services"
+}
+
+# Add custom permissions
+# permission_query_conditions = {
+#     "Product": "data_migration_tool.data_migration_tool.doctype.product.product.get_permission_query_conditions_for_product",
+#     "Service Category": "data_migration_tool.data_migration_tool.doctype.service_category.service_category.get_permission_query_conditions_for_service_category",
+# }
+
+# Add to document events
+doc_events.update({
+    "Product": {
+        "validate": "data_migration_tool.data_migration_tool.doctype.product.product.validate_product_data",
+        "on_update": "data_migration_tool.data_migration_tool.doctype.product.product.on_product_update"
+    }
+})
+
+
+
+# Add document events for new DocTypes
+doc_events.update({
+    "Product": {
+        "validate": "data_migration_tool.data_migration_tool.doctype.product.product.validate_product_relationships",
+        "on_update": "data_migration_tool.data_migration.utils.scheduler_tasks.on_product_update"
+    },
+    "Service Category": {
+        "on_update": "data_migration_tool.data_migration.utils.scheduler_tasks.on_master_data_update"
+    },
+    "Vehicle Type": {
+        "on_update": "data_migration_tool.data_migration.utils.scheduler_tasks.on_master_data_update"  
+    },
+    "Service Type": {
+        "on_update": "data_migration_tool.data_migration.utils.scheduler_tasks.on_master_data_update"
+    }
+})
+
+# Add fixtures for easy deployment
+fixtures = [
+    {
+        "dt": "Service Category",
+        "filters": [["name", "in", ["Wash", "Polishing", "Detailing", "Other Services"]]]
+    },
+    {
+        "dt": "Vehicle Type", 
+        "filters": [["name", "in", ["HatchBack", "Sedan/SUV", "Luxury", "General"]]]
+    },
+    {
+        "dt": "Service Type",
+        "filters": [["name", "in", ["One-time", "Subscription"]]]
+    }
+]
+
 # Svg Icons
 # ------------------
 # include app icons in desk
@@ -299,10 +357,11 @@ api_methods = [
     "data_migration_tool.data_migration.api.handle_doctype_creation_response",
     "data_migration_tool.data_migration.api.get_pending_doctype_requests", 
     "data_migration_tool.data_migration.api.get_existing_doctypes",
-    # ADD THESE NEW ONES:
     "data_migration_tool.data_migration.api.get_job_status",  # New method we'll create
     "data_migration_tool.data_migration.connectors.csv_connector.get_buffer_statistics",  # Fix buffer stats
     "data_migration_tool.data_migration.utils.scheduler_tasks.manual_csv_processing"  # For manual triggers
+    "data_migration_tool.data_migration.importers.yawlit_importer.import_yawlit_services",  # ADD THIS
+    "data_migration_tool.data_migration.api.get_product_catalog" # ADD THIS
 ]
 
 
