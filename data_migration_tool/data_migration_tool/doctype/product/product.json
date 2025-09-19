@@ -2,7 +2,7 @@
  "actions": [],
  "allow_rename": 1,
  "autoname": "field:product_name",
- "creation": "2025-09-18 15:00:00.000000",
+ "creation": "2025-09-18 15:00:00",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
@@ -16,8 +16,6 @@
   "stock_uom",
   "is_active",
   "description",
-  "pricing_section",
-  "monthly_slabs",
   "addons_section",
   "addons"
  ],
@@ -30,34 +28,35 @@
   {
    "fieldname": "product_name",
    "fieldtype": "Data",
+   "in_list_view": 1,
    "label": "Product Name",
+   "length": 400,
    "reqd": 1,
-   "unique": 1,
-   "in_list_view": 1
+   "unique": 1
   },
   {
    "fieldname": "service_category",
    "fieldtype": "Link",
+   "in_list_view": 1,
    "label": "Service Category",
    "options": "Service Category",
-   "reqd": 1,
-   "in_list_view": 1
+   "reqd": 1
   },
   {
    "fieldname": "vehicle_type",
    "fieldtype": "Link",
+   "in_list_view": 1,
    "label": "Vehicle Type",
    "options": "Vehicle Type",
-   "reqd": 1,
-   "in_list_view": 1
+   "reqd": 1
   },
   {
    "fieldname": "service_type",
    "fieldtype": "Link",
+   "in_list_view": 1,
    "label": "Service Type",
    "options": "Service Type",
-   "reqd": 1,
-   "in_list_view": 1
+   "reqd": 1
   },
   {
    "fieldname": "column_break_5",
@@ -66,39 +65,28 @@
   {
    "fieldname": "one_time_price",
    "fieldtype": "Currency",
-   "label": "One-time Price",
-   "precision": 2,
-   "in_list_view": 1
+   "in_list_view": 1,
+   "label": "Price",
+   "precision": "2"
   },
   {
+   "default": "Nos",
    "fieldname": "stock_uom",
    "fieldtype": "Link",
    "label": "Stock UOM",
-   "options": "UOM",
-   "default": "Nos"
+   "options": "UOM"
   },
   {
+   "default": "1",
    "fieldname": "is_active",
    "fieldtype": "Check",
-   "label": "Is Active",
-   "default": 1,
-   "in_list_view": 1
+   "in_list_view": 1,
+   "label": "Is Active"
   },
   {
    "fieldname": "description",
-   "fieldtype": "Small Text",
+   "fieldtype": "Long Text",
    "label": "Description"
-  },
-  {
-   "fieldname": "pricing_section",
-   "fieldtype": "Section Break",
-   "label": "Monthly Pricing"
-  },
-  {
-   "fieldname": "monthly_slabs",
-   "fieldtype": "Table",
-   "label": "Monthly Pricing Slabs",
-   "options": "Monthly Pricing Slab"
   },
   {
    "fieldname": "addons_section",
@@ -114,7 +102,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-09-18 15:00:00.000000",
+ "modified": "2025-09-19 14:20:03.974218",
  "modified_by": "Administrator",
  "module": "Data Migration Tool",
  "name": "Product",
@@ -145,6 +133,7 @@
    "write": 1
   }
  ],
+ "row_format": "Dynamic",
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": [],

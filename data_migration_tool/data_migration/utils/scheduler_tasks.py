@@ -830,11 +830,11 @@ def cleanup_job_context():
     """Cleanup context after background jobs"""
     pass
 
-def on_settings_update():
+def on_settings_update(doc=None, method=None):
     """Handle Migration Settings updates"""
     from data_migration_tool.data_migration.utils.logger_config import migration_logger
-    migration_logger.logger.info("🔄 Migration Settings updated")
-
+    migration_logger.logger.info("Migration Settings updated")
+    
 def cleanup_old_logs():
     """Clean up old migration logs with enhanced error handling"""
     from data_migration_tool.data_migration.utils.logger_config import migration_logger
