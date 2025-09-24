@@ -1,0 +1,1 @@
+# Odoo connector stub

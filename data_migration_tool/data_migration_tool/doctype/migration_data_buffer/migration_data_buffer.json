@@ -1,0 +1,194 @@
+{
+    "actions": [],
+    "allow_rename": 1,
+    "creation": "2025-09-15 13:46:00.000000",
+    "doctype": "DocType",
+    "engine": "InnoDB",
+    "field_order": [
+        "buffer_details",
+        "source_file",
+        "target_doctype",
+        "row_index",
+        "column_break_1",
+        "processing_status",
+        "retry_count",
+        "priority",
+        "data_section",
+        "raw_data",
+        "converted_data",
+        "validation_results",
+        "error_section",
+        "error_log",
+        "error_type",
+        "timestamps_section",
+        "created_at",
+        "processed_at",
+        "column_break_2",
+        "created_by",
+        "processing_time_ms",
+        "memory_usage_mb"
+    ],
+    "fields": [
+        {
+            "fieldname": "buffer_details",
+            "fieldtype": "Section Break",
+            "label": "Buffer Details"
+        },
+        {
+            "fieldname": "source_file",
+            "fieldtype": "Data",
+            "label": "Source File",
+            "reqd": 1,
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "target_doctype",
+            "fieldtype": "Data",
+            "label": "Target DocType",
+            "reqd": 1,
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "row_index",
+            "fieldtype": "Int",
+            "label": "Row Index",
+            "reqd": 1
+        },
+        {
+            "fieldname": "column_break_1",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "processing_status",
+            "fieldtype": "Select",
+            "label": "Processing Status",
+            "options": "Pending\nProcessing\nProcessed\nFailed\nSkipped\nRetrying",
+            "default": "Pending",
+            "in_list_view": 1,
+            "in_standard_filter": 1
+        },
+        {
+            "fieldname": "retry_count",
+            "fieldtype": "Int",
+            "label": "Retry Count",
+            "default": "0"
+        },
+        {
+            "fieldname": "priority",
+            "fieldtype": "Select",
+            "label": "Priority",
+            "options": "Low\nNormal\nHigh\nUrgent",
+            "default": "Normal"
+        },
+        {
+            "fieldname": "data_section",
+            "fieldtype": "Section Break",
+            "label": "Data"
+        },
+        {
+            "fieldname": "raw_data",
+            "fieldtype": "JSON",
+            "label": "Raw Data (JSON)"
+        },
+        {
+            "fieldname": "converted_data",
+            "fieldtype": "JSON",
+            "label": "Converted Data"
+        },
+        {
+            "fieldname": "validation_results",
+            "fieldtype": "JSON",
+            "label": "Validation Results"
+        },
+        {
+            "fieldname": "error_section",
+            "fieldtype": "Section Break",
+            "label": "Error Details",
+            "depends_on": "eval:doc.processing_status=='Failed'"
+        },
+        {
+            "fieldname": "error_log",
+            "fieldtype": "Text",
+            "label": "Error Log"
+        },
+        {
+            "fieldname": "error_type",
+            "fieldtype": "Select",
+            "label": "Error Type",
+            "options": "\nValidation Error\nConversion Error\nDuplicate Error\nDatabase Error\nPermission Error\nUnknown Error"
+        },
+        {
+            "fieldname": "timestamps_section",
+            "fieldtype": "Section Break",
+            "label": "Timestamps"
+        },
+        {
+            "fieldname": "created_at",
+            "fieldtype": "Datetime",
+            "label": "Created At",
+            "default": "Now",
+            "read_only": 1
+        },
+        {
+            "fieldname": "processed_at",
+            "fieldtype": "Datetime",
+            "label": "Processed At",
+            "read_only": 1
+        },
+        {
+            "fieldname": "column_break_2",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "created_by",
+            "fieldtype": "Link",
+            "label": "Created By",
+            "options": "User",
+            "read_only": 1,
+            "reqd": 0
+        },
+        {
+            "fieldname": "processing_time_ms",
+            "fieldtype": "Int",
+            "label": "Processing Time (ms)",
+            "read_only": 1
+        },
+        {
+            "fieldname": "memory_usage_mb",
+            "fieldtype": "Float",
+            "label": "Memory Usage (MB)",
+            "read_only": 1,
+            "precision": 2
+        }
+    ],
+    "index_web_pages_for_search": 1,
+    "links": [],
+    "modified": "2025-09-15 13:46:00.000000",
+    "modified_by": "Administrator",
+    "module": "Data Migration Tool",
+    "name": "Migration Data Buffer",
+    "owner": "Administrator",
+    "permissions": [
+        {
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "export": 1,
+            "print": 1,
+            "read": 1,
+            "report": 1,
+            "role": "System Manager",
+            "share": 1,
+            "write": 1
+        },
+        {
+            "read": 1,
+            "role": "All"
+        }
+    ],
+    "sort_field": "created_at",
+    "sort_order": "DESC",
+    "states": [],
+    "track_changes": 1,
+    "title_field": "source_file"
+}

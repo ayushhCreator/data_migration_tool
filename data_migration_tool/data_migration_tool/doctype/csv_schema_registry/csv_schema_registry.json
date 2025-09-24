@@ -1,0 +1,80 @@
+{
+    "actions": [],
+    "allow_import": 1,
+    "autoname": "format:CSV-SCHEMA-{#####}",
+    "creation": "2025-09-16 13:15:00",
+    "doctype": "DocType",
+    "editable_grid": 1,
+    "engine": "InnoDB",
+    "field_order": [
+        "source_file",
+        "schema_fingerprint", 
+        "headers_json",
+        "target_doctype",
+        "created_date",
+        "field_count"
+    ],
+    "fields": [
+        {
+            "fieldname": "source_file",
+            "fieldtype": "Data",
+            "label": "Source File",
+            "reqd": 1
+        },
+        {
+            "fieldname": "schema_fingerprint",
+            "fieldtype": "Data",
+            "label": "Schema Fingerprint",
+            "reqd": 1,
+            "unique": 1
+        },
+        {
+            "fieldname": "headers_json",
+            "fieldtype": "Long Text",
+            "label": "Headers JSON"
+        },
+        {
+            "fieldname": "target_doctype",
+            "fieldtype": "Link",
+            "label": "Target DocType",
+            "options": "DocType",
+            "reqd": 1
+        },
+        {
+            "fieldname": "created_date",
+            "fieldtype": "Date",
+            "label": "Created Date",
+            "default": "Today"
+        },
+        {
+            "fieldname": "field_count",
+            "fieldtype": "Int",
+            "label": "Field Count"
+        }
+    ],
+    "index_web_pages_for_search": 1,
+    "istable": 0,
+    "modified": "2025-09-16 13:15:00",
+    "modified_by": "Administrator",
+    "module": "Data Migration Tool",
+    "name": "CSV Schema Registry",
+    "owner": "Administrator",
+    "permissions": [
+        {
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "export": 1,
+            "print": 1,
+            "read": 1,
+            "report": 1,
+            "role": "System Manager",
+            "share": 1,
+            "write": 1
+        }
+    ],
+    "sort_field": "modified",
+    "sort_order": "DESC",
+    "title_field": "source_file",
+    "track_changes": 1
+}
