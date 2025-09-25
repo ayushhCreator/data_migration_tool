@@ -909,3 +909,185 @@ class CSVConnector:
     def is_duplicate_row(self, row_hash: str, source_file: str) -> bool:
         """Check if exact same row was imported before"""
         return frappe.db.exists('Import Log', {'row_hash': row_hash, 'source_file': source_file})
+    
+
+    def store_raw_data_with_mapping(self, df: pd.DataFrame, source_file: str, target_doctype: str, field_mappings: Dict[str, str]) -> int:
+        """Store raw data with intelligent field mapping"""
+        try:
+            stored_count = 0
+            for index, row in df.iterrows():
+                # Apply field mappings and handle empty values
+                mapped_data = {}
+                for source_field, value in row.to_dict().items():
+                    target_field = field_mappings.get(source_field, source_field)
+                    # Handle empty values intelligently
+                    if pd.isna(value) or value == '' or str(value).strip() == '':
+                        mapped_data[target_field] = None
+                    else:
+                        # Clean and convert value
+                        cleaned_value = str(value).strip()
+                        mapped_data[target_field] = cleaned_value
+                # Always store the record, even with empty fields
+                buffer_doc = frappe.get_doc({
+                    "doctype": "Migration Data Buffer",
+                    "source_file": source_file,
+                    "target_doctype": target_doctype,
+                    "raw_data": json.dumps(self.convert_numpy_types(mapped_data)),
+                    "processing_status": "Pending",
+                    "created_at": now()
+                })
+                buffer_doc.insert(ignore_permissions=True, ignore_mandatory=True)
+                stored_count += 1
+            frappe.db.commit()
+            return stored_count
+        except Exception as e:
+            self.logger.logger.error(f"Failed to store raw data with mapping: {str(e)}")
+            return 0
+        
+    def process_buffered_data_with_intelligent_merge(self, target_doctype: str, batch_size: int, existing_records: Dict, field_mappings: Dict) -> Dict[str, int]:
+        """Process buffered data with intelligent merge and empty field handling"""
+        results = {'success': 0, 'failed': 0, 'skipped': 0, 'updated': 0}
+        try:
+            # Get pending buffer records
+            buffer_records = frappe.get_all(
+                'Migration Data Buffer',
+                filters={
+                    'target_doctype': target_doctype,
+                    'processing_status': 'Pending'
+                },
+                fields=['name', 'raw_data', 'source_file'],
+                limit=batch_size
+            )
+            if not buffer_records:
+                return results
+            for buffer_record in buffer_records:
+                try:
+                    raw_data = json.loads(buffer_record.raw_data)
+                    # Apply intelligent transformations
+                    processed_data = self._apply_intelligent_transformations(raw_data, target_doctype)
+                    # Check for existing record
+                    existing_name = self._find_existing_record(processed_data, existing_records, target_doctype)
+                    if existing_name:
+                        # Update existing record, preserving non-empty fields
+                        if self._update_record_intelligently(existing_name, processed_data, target_doctype):
+                            results['updated'] += 1
+                        else:
+                            results['skipped'] += 1
+                    else:
+                        # Create new record, allowing empty fields
+                        new_name = self._create_record_with_empty_fields(processed_data, target_doctype)
+                        if new_name:
+                            results['success'] += 1
+                            # Update lookup for subsequent records
+                            self._add_to_lookup(existing_records, processed_data, new_name)
+                        else:
+                            results['failed'] += 1
+                    # Mark buffer record as processed
+                    frappe.db.set_value('Migration Data Buffer', buffer_record.name, 'processing_status', 'Processed')
+                except Exception as e:
+                    self.logger.logger.error(f"Failed to process buffer record {buffer_record.name}: {str(e)}")
+                    frappe.db.set_value('Migration Data Buffer', buffer_record.name, 'processing_status', 'Failed')
+                    results['failed'] += 1
+            frappe.db.commit()
+            return results
+        except Exception as e:
+            self.logger.logger.error(f"Batch processing failed: {str(e)}")
+            return results
+        
+    def _apply_intelligent_transformations(self, raw_data: Dict, target_doctype: str) -> Dict:
+        """Apply intelligent data transformations"""
+        transformed = {}
+        try:
+            doctype_meta = frappe.get_meta(target_doctype)
+            field_types = {f.fieldname: f.fieldtype for f in doctype_meta.fields}
+            for field_name, value in raw_data.items():
+                field_type = field_types.get(field_name, 'Data')
+                # Handle empty values - keep them as None/empty
+                if value is None or value == '' or str(value).strip() == '':
+                    transformed[field_name] = None if field_type != 'Data' else ''
+                    continue
+                # Apply type-specific transformations
+                if field_type == 'Date':
+                    transformed[field_name] = self._parse_date_intelligently(str(value))
+                elif field_type == 'Currency' or field_type == 'Float':
+                    transformed[field_name] = self._parse_number_intelligently(str(value))
+                elif field_type == 'Int':
+                    transformed[field_name] = self._parse_int_intelligently(str(value))
+                elif field_type == 'Check':
+                    transformed[field_name] = self._parse_boolean_intelligently(str(value))
+                else:
+                    transformed[field_name] = str(value).strip()
+            return transformed
+        except Exception as e:
+            self.logger.logger.error(f"Transformation failed: {str(e)}")
+            return raw_data
+    
+    def _create_record_with_empty_fields(self, data: Dict, target_doctype: str) -> str:
+        """Create record allowing empty fields"""
+        try:
+            # Filter out None values for mandatory fields, but keep empty strings
+            filtered_data = {}
+            doctype_meta = frappe.get_meta(target_doctype)
+            mandatory_fields = [f.fieldname for f in doctype_meta.fields if f.reqd]
+            for field_name, value in data.items():
+                if field_name in mandatory_fields and (value is None or value == ''):
+                    # Skip None values for mandatory fields, but provide a default
+                    if field_name not in ['name']:  # Don't set name field
+                        filtered_data[field_name] = 'Not Provided'
+                else:
+                    filtered_data[field_name] = value
+            doc_data = {"doctype": target_doctype}
+            doc_data.update(filtered_data)
+            new_doc = frappe.get_doc(doc_data)
+            new_doc.insert(ignore_permissions=True, ignore_mandatory=True)
+            frappe.db.commit()
+            return new_doc.name
+        except Exception as e:
+            self.logger.logger.error(f"Failed to create record: {str(e)}")
+            return None
+   
+    def _parse_date_intelligently(self, value: str) -> str:
+        """Parse date with multiple format support"""
+        if not value or value.strip() == '':
+            return None
+        date_formats = [
+            '%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y', '%d-%m-%Y',
+            '%Y-%m-%d %H:%M:%S', '%d/%m/%Y %H:%M:%S'
+        ]
+        for fmt in date_formats:
+            try:
+                parsed_date = datetime.strptime(value.strip(), fmt)
+                return parsed_date.strftime('%Y-%m-%d')
+            except:
+                continue
+        return None
+
+    def _parse_number_intelligently(self, value: str) -> float:
+        """Parse number removing currency symbols and commas"""
+        if not value or value.strip() == '':
+            return 0.0
+        # Remove currency symbols and commas
+        cleaned = re.sub(r'[^\d.-]', '', str(value))
+        try:
+            return float(cleaned)
+        except:
+            return 0.0
+
+    def _parse_int_intelligently(self, value: str) -> int:
+        """Parse integer value"""
+        if not value or value.strip() == '':
+            return 0
+        try:
+            return int(float(str(value).replace(',', '')))
+        except:
+            return 0
+
+    def _parse_boolean_intelligently(self, value: str) -> int:
+        """Parse boolean value"""
+        if not value or value.strip() == '':
+            return 0
+        value_lower = str(value).lower().strip()
+        if value_lower in ['true', 'yes', '1', 'on', 'enabled']:
+            return 1
+        return 0
+    

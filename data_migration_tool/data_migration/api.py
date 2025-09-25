@@ -86,78 +86,6 @@ def handle_doctype_creation_response(request_id, action, target_doctype=None, re
         migration_logger.logger.error(f"âŒ Error handling approval: {str(e)}")
         return {"status": "error", "message": f"Internal error: {str(e)}"}
 
-
-@frappe.whitelist()
-def process_uploaded_csv(file_path, user_mapping=None):
-    """New endpoint for direct CSV processing"""
-    try:
-        from data_migration_tool.data_migration.connectors.csv_connector import CSVConnector
-        from data_migration_tool.data_migration.mappers.field_mapper import EnhancedFieldMapper
-        
-        # Validate file exists
-        if not os.path.exists(file_path):
-            return {"status": "error", "message": "File not found"}
-        
-        csv_connector = CSVConnector(migration_logger)
-        field_mapper = EnhancedFieldMapper()
-        
-        # Read and analyze CSV
-        df = csv_connector.read_file_as_strings(file_path)
-        if df.empty:
-            return {"status": "error", "message": "Empty CSV file"}
-        
-        # Apply header normalization
-        df = csv_connector.normalize_headers(df)
-        
-        # Detect DocType if not provided
-        if not user_mapping:
-            from data_migration_tool.data_migration.mappers.doctype_creator import DynamicDocTypeCreator
-            creator = DynamicDocTypeCreator(migration_logger)
-            detection_result = creator.detect_doctype_with_confidence(
-                list(df.columns), 
-                df.iloc[0].to_dict()
-            )
-            
-            if detection_result['requires_approval']:
-                # Return for user approval
-                return {
-                    "status": "requires_approval",
-                    "detection_result": detection_result,
-                    "sample_data": df.head(3).to_dict('records')
-                }
-            
-            target_doctype = detection_result['suggested_doctype']
-        else:
-            target_doctype = user_mapping['target_doctype']
-        
-        # Get comprehensive field mapping
-        mapping_result = field_mapper.get_comprehensive_mapping(
-            list(df.columns), target_doctype
-        )
-        
-        # Process with upsert logic
-        results = {"total": 0, "inserted": 0, "updated": 0, "failed": 0, "skipped": 0}
-        
-        for index, row in df.iterrows():
-            row_data = {mapping_result['field_mappings'][k]: v 
-                       for k, v in row.to_dict().items() 
-                       if k in mapping_result['field_mappings'] and v}
-            
-            upsert_result = csv_connector.upsert_row(
-                row_data, target_doctype, mapping_result['identifier_fields']
-            )
-            
-            results['total'] += 1
-            if upsert_result['action'] in results:
-                results[upsert_result['action']] += 1
-        
-        frappe.db.commit()
-        return {"status": "success", "results": results, "mapping": mapping_result}
-        
-    except Exception as e:
-        frappe.log_error(str(e), "CSV Processing Error")
-        return {"status": "error", "message": str(e)}
-
 @frappe.whitelist()
 def get_pending_doctype_requests():
     """ENHANCED: Get all pending DocType creation requests with better formatting"""
@@ -476,4 +404,33 @@ def get_processing_status(doctype_name):
         }
         
     except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+# Add this function to your api.py file
+
+@frappe.whitelist()
+def manual_csv_processing():
+    """Manual CSV processing trigger - whitelisted version"""
+    try:
+        if not frappe.has_permission("Migration Settings", "write"):
+            return {"status": "error", "message": "Insufficient permissions"}
+        
+        from data_migration_tool.data_migration.utils.scheduler_tasks import process_csv_files_with_jit
+        
+        # Enqueue the processing job
+        frappe.enqueue(
+            process_csv_files_with_jit,
+            queue='long',
+            timeout=3600,
+            job_name=f'manual_csv_processing_{frappe.utils.now_datetime().strftime("%Y%m%d_%H%M%S")}'
+        )
+        
+        return {
+            "status": "success",
+            "message": "CSV processing started manually"
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Manual CSV processing failed: {str(e)}")
         return {"status": "error", "message": str(e)}

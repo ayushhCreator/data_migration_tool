@@ -22,9 +22,61 @@ frappe.ui.form.on('Migration Settings', {
             trigger_sync(frm, 'odoo');
         }, __('Manual Sync'));
 
-        frm.add_custom_button(__('Process CSV Files'), function() {
-            trigger_sync(frm, 'csv');
-        }, __('Manual Sync'));
+       // Replace the existing "Process CSV Files" button with this enhanced version
+frm.add_custom_button(__("Intelligent CSV Processing"), function() {
+    frappe.confirm(
+        'Are you sure you want to start intelligent CSV processing? This will analyze and automatically process CSV files with smart field mapping.',
+        function() {
+            frappe.show_alert({
+                message: __('Starting intelligent CSV processing...'),
+                indicator: 'blue'
+            });
+            
+            frappe.call({
+                method: 'trigger_intelligent_processing',
+                doc: frm.doc,
+                callback: function(r) {
+                    if (r.message && r.message.status === 'success') {
+                        frappe.show_alert({
+                            message: __(r.message.message),
+                            indicator: 'green'
+                        });
+                        
+                        // Show processing details
+                        frappe.msgprint({
+                            title: __('Processing Started'),
+                            message: `
+                                <p><strong>Files Found:</strong> ${r.message.files_found}</p>
+                                <p><strong>Job ID:</strong> ${r.message.job_id}</p>
+                                <p>The system will intelligently analyze CSV headers and create appropriate DocTypes.</p>
+                                <p><em>Check Migration Status for updates.</em></p>
+                            `,
+                            indicator: 'blue'
+                        });
+                        
+                        // Auto-refresh status after 5 seconds
+                        if (r.message.job_id) {
+                            setTimeout(() => check_job_status(r.message.job_id), 5000);
+                        }
+                    } else {
+                        frappe.msgprint({
+                            title: __('Processing Failed'),
+                            message: r.message ? r.message.message : 'Failed to start intelligent processing',
+                            indicator: 'red'
+                        });
+                    }
+                },
+                error: function(r) {
+                    frappe.msgprint({
+                        title: __('Processing Error'),
+                        message: 'Failed to trigger intelligent processing. Please try again.',
+                        indicator: 'red'
+                    });
+                }
+            });
+        }
+    );
+}, __("Manual Sync"));
 
         frm.add_custom_button(__('Full Sync'), function() {
             trigger_sync(frm, 'all');

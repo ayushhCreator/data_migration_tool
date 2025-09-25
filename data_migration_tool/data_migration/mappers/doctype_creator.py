@@ -43,123 +43,187 @@ class DynamicDocTypeCreator:
         }
     
     def create_doctype_from_analysis(self, analysis: Dict[str, Any], doctype_name: str) -> str:
-        """Create DocType with JIT-friendly field definitions"""
+        """Create DocType with intelligent field limits to avoid MySQL row size errors"""
         try:
-            clean_name = self._clean_doctype_name(doctype_name)
-            
-            # Check if DocType already exists
+            clean_name = self.clean_doctype_name(doctype_name)
             if frappe.db.exists('DocType', clean_name):
                 self.logger.logger.info(f"📋 DocType {clean_name} already exists")
                 return clean_name
-            
-            # Create DocType definition with JIT support
+            # Count total fields to determine optimization strategy
+            total_fields = len(analysis['fields'])
+            self.logger.logger.info(f"📊 Creating DocType with {total_fields} fields")
+            # Create optimized DocType definition
             doctype_dict = {
                 "doctype": "DocType",
                 "name": clean_name,
                 "module": "Data Migration Tool",
                 "custom": 1,
                 "is_submittable": 0,
-                "track_changes": 1,
+                "track_changes": 0,  # Disable change tracking for large tables
                 "allow_rename": 1,
                 "fields": []
             }
-            
-            # Add JIT migration tracking fields
+            # Add lightweight migration tracking fields
             doctype_dict["fields"].extend([
                 {
                     "fieldname": "migration_source",
                     "fieldtype": "Data",
                     "label": "Migration Source",
+                    "length": 50,
                     "read_only": 1,
-                    "default": "JIT CSV Import"
+                    "default": "CSV Import"
                 },
                 {
-                    "fieldname": "migration_id",
-                    "fieldtype": "Data", 
-                    "label": "Migration ID",
-                    "unique": 1,
-                    "read_only": 1
-                },
-                {
-                    "fieldname": "migration_timestamp",
-                    "fieldtype": "Datetime",
-                    "label": "Migration Timestamp",
+                    "fieldname": "migration_batch",
+                    "fieldtype": "Data",
+                    "label": "Migration Batch",
+                    "length": 20,
                     "read_only": 1
                 }
             ])
-            
-            # Add CSV fields with JIT-optimized types
+            # Add optimized CSV fields
+            field_count = 0
+            data_field_count = 0  # Track Data fields to manage row size
             for original_name, field_info in analysis['fields'].items():
-                field_dict = self._create_jit_field_definition(original_name, field_info)
+                field_dict = self.create_jit_field_definition(original_name, field_info)
+                # MySQL row size management: limit Data fields, use Text/Long Text for others
+                if field_dict['fieldtype'] == 'Data':
+                    data_field_count += 1
+                    if data_field_count > 30:  # After 30 Data fields, switch to Text
+                        field_dict['fieldtype'] = 'Long Text'
+                        field_dict.pop('length', None)
                 doctype_dict["fields"].append(field_dict)
-            
-             # FIXED: Use safe permissions that don't require Administrator
-            current_user = frappe.session.user
-        
-            if current_user == 'Administrator':
-               # Full permissions for Administrator
-               doctype_dict['permissions'] = [
-                  {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1},
-                  {"role": "All", "read": 1}
-                ]
-            else:
-                # Safe permissions for non-Administrator users
-                doctype_dict['permissions'] = [
-                   {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1}
-                ]
-        
-             # Set Administrator as user before DocType creation
+                field_count += 1
+            # Set safe permissions
+            doctype_dict["permissions"] = [
+                {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1},
+                {"role": "All", "read": 1}
+            ]
+            # Create DocType with proper user context
             original_user = frappe.session.user
             frappe.set_user('Administrator')
-        
             try:
-               doc = frappe.get_doc(doctype_dict)
-               doc.insert(ignore_permissions=True)
-               frappe.db.commit()
-               self.logger.logger.info(f"✅ Created JIT-optimized DocType: {clean_name}")
-               return clean_name
+                doc = frappe.get_doc(doctype_dict)
+                doc.insert(ignore_permissions=True)
+                frappe.db.commit()
+                self.logger.logger.info(f"✅ Created optimized DocType {clean_name} with {field_count} fields")
+                return clean_name
             finally:
-              # Restore original user
-              frappe.set_user(original_user)
-            
+                frappe.set_user(original_user)
         except Exception as e:
-          self.logger.logger.error(f"❌ Failed to create DocType {doctype_name}: {str(e)}")
-          raise e
+            error_msg = str(e)
+            if "Row size too large" in error_msg:
+                self.logger.logger.error(f"❌ MySQL row size limit exceeded for {doctype_name}")
+                self.logger.logger.error("🔧 Try reducing field count or using Long Text fields")
+                # Try creating with minimal fields
+                return self.create_minimal_doctype(clean_name, analysis)
+            else:
+                self.logger.logger.error(f"❌ Failed to create DocType {doctype_name}: {error_msg}")
+                raise e
     
+    def create_minimal_doctype(self, clean_name: str, analysis: Dict[str, Any]) -> str:
+        """Fallback: Create DocType with only essential fields to avoid row size limits"""
+        try:
+            self.logger.logger.info(f"🔧 Creating minimal DocType {clean_name} due to size constraints")
+            # Take only first 20 most important fields
+            important_fields = {}
+            field_priority = ['id', 'name', 'email', 'phone', 'code', 'number', 'amount', 'date', 'description']
+            # First, get fields that match priority patterns
+            for pattern in field_priority:
+                for original_name, field_info in analysis['fields'].items():
+                    if pattern in original_name.lower() and len(important_fields) < 15:
+                        important_fields[original_name] = field_info
+            # Fill remaining slots with other fields
+            for original_name, field_info in analysis['fields'].items():
+                if original_name not in important_fields and len(important_fields) < 20:
+                    important_fields[original_name] = field_info
+            # Create minimal DocType
+            minimal_analysis = {
+                'fields': important_fields,
+                'total_records': analysis.get('total_records', 0)
+            }
+            doctype_dict = {
+                "doctype": "DocType",
+                "name": clean_name,
+                "module": "Data Migration Tool",
+                "custom": 1,
+                "is_submittable": 0,
+                "track_changes": 0,
+                "fields": []
+            }
+            # Add only essential tracking
+            doctype_dict["fields"].append({
+                "fieldname": "migration_source",
+                "fieldtype": "Data",
+                "label": "Source",
+                "length": 30,
+                "default": "CSV"
+            })
+            # Add optimized fields (all as Long Text to avoid row size issues)
+            for original_name, field_info in important_fields.items():
+                field_dict = {
+                    'fieldname': field_info['clean_name'],
+                    'fieldtype': 'Long Text',  # Use Long Text for everything to avoid row size
+                    'label': self.clean_label(original_name),
+                    'description': f"CSV: {original_name}"
+                }
+                doctype_dict["fields"].append(field_dict)
+            doctype_dict["permissions"] = [{"role": "System Manager", "read": 1, "write": 1, "create": 1}]
+            # Create minimal DocType
+            frappe.set_user('Administrator')
+            doc = frappe.get_doc(doctype_dict)
+            doc.insert(ignore_permissions=True)
+            frappe.db.commit()
+            self.logger.logger.info(f"✅ Created minimal DocType {clean_name} with {len(important_fields)} key fields")
+            self.logger.logger.warning(f"⚠️ Reduced from {len(analysis['fields'])} to {len(important_fields)} fields due to MySQL limits")
+            return clean_name
+        except Exception as e:
+            self.logger.logger.error(f"❌ Failed to create minimal DocType: {str(e)}")
+            raise e
 
-
-    def _create_jit_field_definition(self, original_name: str, field_info: Dict[str, Any]) -> Dict[str, Any]:
-        """Enhanced field definition with large ID support"""
+    def create_jit_field_definition(self, original_name: str, field_info: Dict[str, Any]) -> Dict[str, Any]:
+        """Enhanced field definition with MySQL row size limits and intelligent field optimization"""
         field_dict = {
-            "fieldname": field_info['clean_name'],
-            "fieldtype": field_info['suggested_type'],
-            "label": self._clean_label(original_name),
-            "description": f"JIT field from CSV column: {original_name}"
+            'fieldname': field_info['clean_name'],
+            'fieldtype': field_info['suggested_type'],
+            'label': self.clean_label(original_name),
+            'description': f"JIT field from CSV column: {original_name}"
         }
-
-        # Special handling for ID fields
-        field_name_lower = original_name.lower()
-        if 'id' in field_name_lower:
-            # Always use Data type for ID fields to avoid truncation
-            field_dict['fieldtype'] = 'Data'
-            field_dict['length'] = 255  # Increased length for IDs
-            field_dict['description'] += ' (Large IDs auto-shortened)'
-            return field_dict
-
-        # Regular field handling
+        # CRITICAL: Handle MySQL row size limits (8126 bytes per row)
         suggested_type = field_info['suggested_type']
         max_length = field_info.get('max_length', 0)
-
+        # Optimize field types to avoid MySQL row size limit
         if suggested_type == 'Data':
-            if max_length > 140:
-                field_dict['fieldtype'] = 'Text'
+            if max_length > 255:
+                field_dict['fieldtype'] = 'Long Text'  # Uses LONGTEXT, stored off-page
+            elif max_length > 140:
+                field_dict['fieldtype'] = 'Text'       # Uses TEXT, stored off-page  
             else:
-                field_dict['length'] = min(max(max_length + 20, 50), 255)  # Increased max to 255
-
-        elif suggested_type in ['Float', 'Currency']:
-            field_dict['precision'] = 2
-
+                # Keep Data fields short to stay within row size limits
+                field_dict['length'] = min(max(max_length + 10, 30), 140)
+        elif suggested_type == 'Text':
+            field_dict['fieldtype'] = 'Long Text'  # Always use LONGTEXT for large text
+        # Special handling for common field types
+        fieldname_lower = original_name.lower()
+        if 'id' in fieldname_lower:
+            field_dict['fieldtype'] = 'Data'
+            field_dict['length'] = 140  # Standard length for IDs
+            field_dict['description'] = f"ID field: {original_name}"
+        elif 'email' in fieldname_lower:
+            field_dict['fieldtype'] = 'Data'
+            field_dict['length'] = 140
+        elif 'phone' in fieldname_lower or 'mobile' in fieldname_lower:
+            field_dict['fieldtype'] = 'Data'
+            field_dict['length'] = 20
+        elif 'description' in fieldname_lower or 'details' in fieldname_lower or 'notes' in fieldname_lower:
+            field_dict['fieldtype'] = 'Long Text'  # Always use LONGTEXT for descriptions
+        elif 'address' in fieldname_lower:
+            field_dict['fieldtype'] = 'Long Text'  # Use LONGTEXT for addresses
+        # For very wide CSV files (>50 columns), be more aggressive with Text fields
         return field_dict
+
+
+ 
 
     def _determine_field_type(self, sample_values: List[str]) -> str:
         """Enhanced field type detection for JIT processing"""
@@ -653,3 +717,90 @@ class DynamicDocTypeCreator:
                 'requires_approval': confidence < 80,
                 'reasoning': f"Matched {scores.get(best_match, 0)} points from {len(headers)} headers"
             }
+    
+
+    def clean_doctype_name(self, filename: str) -> str:
+        """Clean filename to create valid DocType name"""
+        if not filename:
+            return "Custom_Import_Data"
+        # Extract base name without extension
+        basename = filename.replace('.csv', '').replace('.xlsx', '').replace('.xls', '')
+        # Clean and format the name
+        clean_name = re.sub(r'[^a-zA-Z0-9]', ' ', basename)
+        clean_name = ' '.join(word.capitalize() for word in clean_name.split())
+        clean_name = clean_name.replace(' ', '')  # Remove spaces
+        # Ensure it's not too long (Frappe limit)
+        if len(clean_name) > 60:
+            clean_name = clean_name[:60]
+        # Ensure it doesn't start with a number
+        if clean_name and clean_name[0].isdigit():
+            clean_name = f"Import{clean_name}"
+        # Fallback if empty
+        if not clean_name:
+            clean_name = "CustomImportData"
+        return clean_name
+
+    def clean_label(self, name: str) -> str:
+        """Clean field name to create proper label"""
+        if not name:
+            return "Field"
+        # Convert to readable label
+        clean = str(name).replace('_', ' ').replace('-', ' ')
+        clean = ' '.join(word.capitalize() for word in clean.split())
+        return clean
+
+    def create_minimal_doctype(self, clean_name: str, analysis: Dict[str, Any]) -> str:
+        """Fallback: Create DocType with only essential fields to avoid row size limits"""
+        try:
+            self.logger.logger.info(f"🔧 Creating minimal DocType {clean_name} due to size constraints")
+            # Take only first 20 most important fields
+            important_fields = {}
+            field_priority = ['id', 'name', 'email', 'phone', 'code', 'number', 'amount', 'date', 'description']
+            # First, get fields that match priority patterns
+            for pattern in field_priority:
+                for original_name, field_info in analysis['fields'].items():
+                    if pattern in original_name.lower() and len(important_fields) < 15:
+                        important_fields[original_name] = field_info
+            # Fill remaining slots with other fields
+            for original_name, field_info in analysis['fields'].items():
+                if original_name not in important_fields and len(important_fields) < 20:
+                    important_fields[original_name] = field_info
+            # Create minimal DocType
+            doctype_dict = {
+                "doctype": "DocType",
+                "name": clean_name,
+                "module": "Data Migration Tool",
+                "custom": 1,
+                "is_submittable": 0,
+                "track_changes": 0,
+                "fields": []
+            }
+            # Add only essential tracking
+            doctype_dict["fields"].append({
+                "fieldname": "migration_source",
+                "fieldtype": "Data",
+                "label": "Source",
+                "length": 30,
+                "default": "CSV"
+            })
+            # Add optimized fields (all as Long Text to avoid row size issues)
+            for original_name, field_info in important_fields.items():
+                field_dict = {
+                    'fieldname': field_info['clean_name'],
+                    'fieldtype': 'Long Text',  # Use Long Text for everything to avoid row size
+                    'label': self.clean_label(original_name),
+                    'description': f"CSV: {original_name}"
+                }
+                doctype_dict["fields"].append(field_dict)
+            doctype_dict["permissions"] = [{"role": "System Manager", "read": 1, "write": 1, "create": 1}]
+            # Create minimal DocType
+            frappe.set_user('Administrator')
+            doc = frappe.get_doc(doctype_dict)
+            doc.insert(ignore_permissions=True)
+            frappe.db.commit()
+            self.logger.logger.info(f"✅ Created minimal DocType {clean_name} with {len(important_fields)} key fields")
+            self.logger.logger.warning(f"⚠️ Reduced from {len(analysis['fields'])} to {len(important_fields)} fields due to MySQL limits")
+            return clean_name
+        except Exception as e:
+            self.logger.logger.error(f"❌ Failed to create minimal DocType: {str(e)}")
+            raise e

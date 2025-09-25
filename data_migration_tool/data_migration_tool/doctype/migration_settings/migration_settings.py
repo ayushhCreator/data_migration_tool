@@ -396,3 +396,37 @@ class MigrationSettings(Document):
 
 # DO NOT ADD ANY STANDALONE FUNCTIONS AFTER THIS POINT!
 # All functions must be methods within the MigrationSettings class.
+     # Add this method to MigrationSettings class
+
+    @frappe.whitelist()
+    def trigger_intelligent_processing(self):
+        """Trigger intelligent CSV processing manually"""
+        try:
+            if not frappe.has_permission('Migration Settings', 'write'):
+                return {'status': 'error', 'message': 'Insufficient permissions'}
+            from frappe.utils.background_jobs import enqueue
+            import datetime
+            if not self.enable_csv_processing:
+                return {'status': 'error', 'message': 'CSV processing is not enabled'}
+            if not os.path.exists(self.csv_watch_directory):
+                return {'status': 'error', 'message': 'CSV watch directory does not exist'}
+            # Count CSV files
+            csv_files = [f for f in os.listdir(self.csv_watch_directory)
+                        if f.endswith('.csv') and os.path.isfile(os.path.join(self.csv_watch_directory, f))]
+            if not csv_files:
+                return {'status': 'warning', 'message': 'No CSV files found to process'}
+            # Enqueue intelligent processing
+            job = enqueue(
+                'data_migration_tool.data_migration.utils.scheduler_tasks.process_csv_files_with_jit',
+                queue='default',
+                timeout=1800
+            )
+            return {
+                'status': 'success',
+                'message': f'Intelligent CSV processing started for {len(csv_files)} files',
+                'job_id': job.id,
+                'files_found': len(csv_files)
+            }
+        except Exception as e:
+            frappe.log_error(f"Intelligent processing error: {str(e)}", "Intelligent Processing Error")
+            return {'status': 'error', 'message': str(e)}
