@@ -216,10 +216,14 @@ class CSVConnector:
         return df
 
     # PRIORITY 1 FIX: Enhanced upsert processing method
-    def process_buffered_data_with_upsert(self, target_doctype: str, batch_size: int = 100) -> Dict[str, int]:
-        """PRIORITY 1: Enhanced processing with true upsert capability"""
+    def process_buffered_data_with_upsert(self, target_doctype: str, batch_size: int = 100, *args, **kwargs) -> Dict[str, int]:
+        """PRIORITY 1: Enhanced processing with true upsert capability - Backward Compatible"""
         results = {"success": 0, "failed": 0, "skipped": 0, "updated": 0}
-        
+        # Ignore any extra arguments for backward compatibility
+        if args:
+            self.logger.logger.warning(f"⚠️ Extra positional arguments ignored: {args}")
+        if kwargs:
+            self.logger.logger.warning(f"⚠️ Extra keyword arguments ignored: {kwargs}")
         try:
             # Get pending records
             pending_records = frappe.db.sql("""
@@ -229,20 +233,15 @@ class CSVConnector:
                 ORDER BY row_index
                 LIMIT %s
             """, (target_doctype, batch_size), as_dict=True)
-            
             if not pending_records:
                 return results
-                
             self.logger.logger.info(f"🔄 Processing {len(pending_records)} records with upsert for {target_doctype}")
-            
             meta = frappe.get_meta(target_doctype)
-            
             for record in pending_records:
                 try:
                     # Parse and convert data
                     raw_data = json.loads(record.raw_data)
                     converted_data = self.apply_jit_conversion(raw_data, meta)
-                    
                     # Validate data
                     validation_errors = self.validate_and_clean_data(converted_data, meta)
                     if validation_errors:
@@ -250,69 +249,55 @@ class CSVConnector:
                         self._update_buffer_status(record.name, "Failed", error_msg)
                         results["failed"] += 1
                         continue
-                    
                     # UPSERT LOGIC: Check if record exists
                     existing_name = self._find_existing_record(converted_data, target_doctype)
-                    
                     if existing_name:
                         # UPDATE existing record
                         try:
                             existing_doc = frappe.get_doc(target_doctype, existing_name)
-                            
                             # Update only non-empty fields from CSV
                             for field, value in converted_data.items():
                                 if field != 'name' and value:  # Don't update name field
                                     setattr(existing_doc, field, value)
-                            
                             existing_doc.save(ignore_permissions=True)
-                            
                             self._update_buffer_status(record.name, "Processed", f"Updated {existing_name}")
                             results["updated"] += 1
                             self.logger.logger.info(f"✅ Row {record.row_index}: Updated {existing_name}")
-                            
                         except Exception as update_error:
                             error_msg = f"Update failed: {str(update_error)[:200]}"
                             self._update_buffer_status(record.name, "Failed", error_msg)
                             results["failed"] += 1
                             self.logger.logger.error(f"❌ Row {record.row_index}: {error_msg}")
-                            
                     else:
                         # INSERT new record
                         try:
                             doc_data = {"doctype": target_doctype}
                             doc_data.update(converted_data)
-                            
                             new_doc = frappe.get_doc(doc_data)
                             new_doc.insert(ignore_permissions=True)
-                            
                             self._update_buffer_status(record.name, "Processed", f"Created {new_doc.name}")
                             results["success"] += 1
                             self.logger.logger.info(f"✅ Row {record.row_index}: Created {new_doc.name}")
-                            
                         except Exception as insert_error:
                             error_msg = f"Insert failed: {str(insert_error)[:200]}"
                             self._update_buffer_status(record.name, "Failed", error_msg)
                             results["failed"] += 1
                             self.logger.logger.error(f"❌ Row {record.row_index}: {error_msg}")
-                            
                 except Exception as record_error:
                     error_msg = f"Record processing failed: {str(record_error)[:200]}"
                     self._update_buffer_status(record.name, "Failed", error_msg)
                     results["failed"] += 1
                     self.logger.logger.error(f"❌ Row {record.row_index}: {error_msg}")
-            
             # Commit all changes
             frappe.db.commit()
-            
             total_processed = sum(results.values())
             self.logger.logger.info(f"✅ Batch completed: {results} | Total: {total_processed}")
-            
             return results
-            
         except Exception as e:
             frappe.db.rollback()
             self.logger.logger.error(f"💥 Batch processing failed: {str(e)}")
             return results
+
 
     def _find_existing_record(self, converted_data: Dict[str, Any], doctype: str) -> Optional[str]:
         """Find existing record using multiple strategies"""
@@ -357,6 +342,11 @@ class CSVConnector:
     # PRIORITY 1 FIX: Enhanced field mapping with proper ID handling
     def apply_jit_conversion(self, raw_data: Dict[str, str], meta) -> Dict[str, Any]:
         """FIXED: Enhanced field mapping with proper error handling"""
+        if meta.name == 'Service Category':
+            self.logger.logger.info(f"🔍 URGENT DEBUG: Raw data = {raw_data}")
+            self.logger.logger.info(f"🔍 URGENT DEBUG: Available fields = {[f.fieldname for f in meta.fields]}")
+    
+        
         converted_data = {}
         available_fields = [f.fieldname for f in meta.fields]
         
@@ -370,6 +360,17 @@ class CSVConnector:
             'contact_id': 'name',
             'user_id': 'name',
             
+        'category_name': 'category_name',    # Direct mapping
+    'description': 'description',        # Direct mapping
+    'service_name': 'service_name',      # Direct mapping  
+    'vehicle_name': 'vehicle_name',      # Direct mapping
+    'addon_name': 'addon_name',          # Direct mapping
+    'default_price': 'default_price',    # Direct mapping
+    'price': 'default_price',            # Map price to default_price for Addon
+    'service_type': 'service_name',      # Map service_type to service_name
+    'vehicle_type': 'vehicle_name',      # Map vehicle_type to vehicle_name
+    
+      
             # Universal mappings
             'email': 'email_id',
             'phone': 'mobile_no',
@@ -470,6 +471,43 @@ class CSVConnector:
             # Continue with basic converted_data
         
         return converted_data
+     
+    def get_yawlit_specific_field_mappings(self, target_doctype: str) -> Dict[str, str]:
+        """Get Yawlit-specific field mappings"""
+        mappings = {
+            'Service Category': {
+                'category_id': 'None',
+                'category_name': 'category_name',
+                'description': 'description'
+            },
+            'Service Type': {
+                'service_type_id': 'None',
+                'service_type': 'service_name',  # KEY FIX
+                'description': 'description'
+            },
+            'Vehicle Type': {
+                'vehicle_type_id': 'None',
+                'vehicle_type': 'vehicle_name',  # KEY FIX
+                'description': 'description'
+            },
+            'Addon': {
+                'addon_id': 'None',
+                'addon_name': 'addon_name',
+                'price': 'default_price',  # KEY FIX
+                'description': 'description'
+            },
+            'Product': {
+                'product_id': 'None',
+                'product_name': 'product_name',
+                'category_id': 'service_category',
+                'service_type_id': 'service_type',
+                'vehicle_type_id': 'vehicle_type',
+                'base_price': 'one_time_price',  # KEY FIX
+                'frequency': 'frequency'
+            }
+        }
+        return mappings.get(target_doctype, {})
+
 
     def upsert_row(self, row_data: Dict, doctype: str, id_fields: List[str]) -> Dict[str, Any]:
             """Replace existing upsert method around line 400"""
@@ -643,9 +681,114 @@ class CSVConnector:
     def _apply_doctype_specific_processing(self, converted_data: Dict[str, Any], raw_data: Dict[str, str], meta) -> Dict[str, Any]:
         """Apply DocType-specific processing rules"""
         doctype_name = meta.name
-        
-        if doctype_name == 'Expense':
-            # Ensure required fields for Expense
+        # YAWLIT SERVICE DOCTYPES - Handle ALL DocTypes
+        if doctype_name == 'Service Category':
+            # WORKING - Service Category fix
+            if 'category_name' in raw_data:
+                converted_data['category_name'] = raw_data['category_name']
+            if 'description' in raw_data:
+                converted_data['description'] = raw_data['description']
+            if 'is_active' not in converted_data:
+                converted_data['is_active'] = 1
+            if 'name' in converted_data and 'category_name' in converted_data:
+                del converted_data['name']
+        elif doctype_name == 'Service Type':
+            # NEW - Service Type fix
+            if 'service_name' in raw_data:
+                converted_data['service_name'] = raw_data['service_name']
+            if 'description' in raw_data:
+                converted_data['description'] = raw_data['description']
+            if 'is_subscription' in raw_data:
+                converted_data['is_subscription'] = int(raw_data['is_subscription'])
+            if 'is_active' not in converted_data:
+                converted_data['is_active'] = 1
+            if 'name' in converted_data and 'service_name' in converted_data:
+                del converted_data['name']
+        elif doctype_name == 'Vehicle Type':
+            # NEW - Vehicle Type fix
+            if 'vehicle_name' in raw_data:
+                converted_data['vehicle_name'] = raw_data['vehicle_name']
+            elif 'vehicle_type' in raw_data:  # Alternative field name
+                converted_data['vehicle_name'] = raw_data['vehicle_type']
+            if 'description' in raw_data:
+                converted_data['description'] = raw_data['description']
+            if 'is_active' not in converted_data:
+                converted_data['is_active'] = 1
+            if 'name' in converted_data and 'vehicle_name' in converted_data:
+                del converted_data['name']
+        elif doctype_name == 'Addon':
+            # NEW - Addon fix
+            if 'addon_name' in raw_data:
+                converted_data['addon_name'] = raw_data['addon_name']
+            if 'price' in raw_data:
+                try:
+                    converted_data['default_price'] = float(raw_data['price'])
+                except (ValueError, TypeError):
+                    converted_data['default_price'] = 0.0
+            elif 'default_price' in raw_data:
+                try:
+                    converted_data['default_price'] = float(raw_data['default_price'])
+                except (ValueError, TypeError):
+                    converted_data['default_price'] = 0.0
+            if 'description' in raw_data:
+                converted_data['description'] = raw_data['description']
+            if 'is_active' not in converted_data:
+                converted_data['is_active'] = 1
+            if 'name' in converted_data and 'addon_name' in converted_data:
+                del converted_data['name']
+        elif doctype_name == 'Product':
+            # NEW - Product fix (more complex due to links)
+            if 'product_name' in raw_data:
+                converted_data['product_name'] = raw_data['product_name']
+            # Handle service_category link
+            if 'service_category' in raw_data:
+                converted_data['service_category'] = raw_data['service_category']
+            elif 'category_id' in raw_data:
+                # Map category_id to actual category name
+                category_map = {'1': 'Wash', '2': 'Polishing', '3': 'Detailing'}
+                category_id = str(raw_data['category_id']).strip()
+                if category_id in category_map:
+                    converted_data['service_category'] = category_map[category_id]
+            # Handle vehicle_type link
+            if 'vehicle_type' in raw_data:
+                converted_data['vehicle_type'] = raw_data['vehicle_type']
+            elif 'vehicle_type_id' in raw_data:
+                # Map vehicle_type_id to actual vehicle type name
+                vehicle_map = {'1': 'HatchBack', '2': 'Sedan/SUV', '3': 'Luxury'}
+                vehicle_id = str(raw_data['vehicle_type_id']).replace('.0', '').strip()
+                if vehicle_id in vehicle_map:
+                    converted_data['vehicle_type'] = vehicle_map[vehicle_id]
+            # Handle service_type link
+            if 'service_type' in raw_data:
+                converted_data['service_type'] = raw_data['service_type']
+            elif 'service_type_id' in raw_data:
+                # Map service_type_id to actual service type name
+                service_map = {'1': 'one_time', '2': 'subscription'}
+                service_id = str(raw_data['service_type_id']).strip()
+                if service_id in service_map:
+                    converted_data['service_type'] = service_map[service_id]
+            # Handle pricing
+            if 'one_time_price' in raw_data:
+                try:
+                    converted_data['one_time_price'] = float(raw_data['one_time_price'])
+                except (ValueError, TypeError):
+                    converted_data['one_time_price'] = 0.0
+            elif 'base_price' in raw_data:
+                try:
+                    converted_data['one_time_price'] = float(raw_data['base_price'])
+                except (ValueError, TypeError):
+                    converted_data['one_time_price'] = 0.0
+            # Handle other fields
+            if 'frequency' in raw_data:
+                converted_data['frequency'] = raw_data['frequency']
+            if 'stock_uom' not in converted_data:
+                converted_data['stock_uom'] = 'Nos'
+            if 'is_active' not in converted_data:
+                converted_data['is_active'] = 1
+            if 'name' in converted_data and 'product_name' in converted_data:
+                del converted_data['name']
+        elif doctype_name == 'Expense':
+            # EXISTING EXPENSE HANDLING (keep unchanged)
             if 'employee' not in converted_data:
                 # Try to get default employee or set to Administrator
                 converted_data['employee'] = frappe.db.get_value('Employee', {'user_id': frappe.session.user}, 'name')
@@ -654,16 +797,14 @@ class CSVConnector:
                     default_employee = frappe.db.get_value('Employee', {}, 'name')
                     if default_employee:
                         converted_data['employee'] = default_employee
-            
             if 'expense_type' not in converted_data:
                 # Set a default expense type
                 converted_data['expense_type'] = 'Office'
-                
             if 'company' not in converted_data:
                 # Set default company
                 converted_data['company'] = frappe.db.get_single_value('Global Defaults', 'default_company')
-        
         return converted_data
+
 
     def _get_doctype_duplicate_rules(self, doctype: str) -> List[List[str]]:
         """Get DocType-specific duplicate detection rules"""
@@ -764,6 +905,10 @@ class CSVConnector:
     def _update_buffer_status(self, buffer_name: str, status: str, error_log: str):
         """Update buffer record status with enhanced logging"""
         try:
+            # Also log to console for debugging
+            if status == "Failed" and error_log:
+               self.logger.logger.error(f"❌ Buffer {buffer_name} failed: {error_log}")
+             
             frappe.db.sql("""
                 UPDATE `tabMigration Data Buffer`
                 SET processing_status = %s,
@@ -1091,3 +1236,5 @@ class CSVConnector:
             return 1
         return 0
     
+
+

@@ -1,3 +1,4 @@
+# product.py - CORRECTED VERSION
 # Copyright (c) 2025, Ayush and contributors
 # For license information, please see license.txt
 
@@ -31,7 +32,7 @@ class Product(Document):
         """Validate addon configurations"""
         if not self.addons:
             return
-            
+        
         seen_addons = set()
         for addon_row in self.addons:
             if not addon_row.addon:
@@ -63,7 +64,6 @@ class Product(Document):
     def get_total_addon_price(self):
         """Calculate total addon price for this product"""
         total_addon_price = 0
-        
         for addon_row in self.addons:
             # Use custom price if available, otherwise get default price from addon
             if addon_row.custom_price:
