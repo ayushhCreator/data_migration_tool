@@ -1,13 +1,13 @@
 import os
 import json
 import frappe
-from frappe.utils import now, get_datetime
+from frappe.utils import now, get_datetime,add_to_date, cstr, cint, flt
 import pandas as pd
 import numpy as np
 from pathlib import Path
 import re
 from datetime import datetime
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional,Tuple
 
 class CSVConnector:
     """Enhanced CSV Connector with universal duplicate detection and improved error handling"""
@@ -16,6 +16,7 @@ class CSVConnector:
         self.logger = logger
         self.supported_formats = ['.csv', '.xlsx', '.xls']
         self.current_field_name = ''
+        self.import_session_id = frappe.generate_hash()[:8]  # NEW: Unique session identifier
 
     def convert_numpy_types(self, obj):
         """Convert numpy types to Python native types for JSON serialization"""
@@ -52,9 +53,9 @@ class CSVConnector:
             
             # Use convert_numpy_types before JSON serialization
             safe_profile = self.convert_numpy_types(profile)
-            self.logger.logger.info(f"📈 Data Profile for {filename}: {json.dumps(safe_profile, indent=2)}")
+            self.logger.logger.info(f"ðŸ“ˆ Data Profile for {filename}: {json.dumps(safe_profile, indent=2)}")
         except Exception as e:
-            self.logger.logger.warning(f"⚠️ Data profiling failed: {str(e)}")
+            self.logger.logger.warning(f"âš ï¸ Data profiling failed: {str(e)}")
 
     def read_file_as_strings(self, file_path: str) -> pd.DataFrame:
         """Read CSV/Excel with enhanced encoding detection and error handling"""
@@ -77,12 +78,12 @@ class CSVConnector:
                             on_bad_lines='skip'
                         )
                         encoding_used = encoding
-                        self.logger.logger.info(f"📄 Successfully read CSV with {encoding} encoding: {Path(file_path).name}")
+                        self.logger.logger.info(f"ðŸ“„ Successfully read CSV with {encoding} encoding: {Path(file_path).name}")
                         break
                     except UnicodeDecodeError:
                         continue
                     except Exception as e:
-                        self.logger.logger.warning(f"⚠️ Failed to read with {encoding}: {str(e)}")
+                        self.logger.logger.warning(f"âš ï¸ Failed to read with {encoding}: {str(e)}")
                         continue
                 
                 if df is None:
@@ -96,7 +97,7 @@ class CSVConnector:
                             errors='replace',
                             on_bad_lines='skip'
                         )
-                        self.logger.logger.warning("⚠️ Used error handling for encoding issues")
+                        self.logger.logger.warning("âš ï¸ Used error handling for encoding issues")
                         encoding_used = 'utf-8 (with error handling)'
                     except Exception as final_error:
                         raise Exception(f"Failed to read CSV file with all encoding attempts: {str(final_error)}")
@@ -105,7 +106,7 @@ class CSVConnector:
                 try:
                     df = pd.read_excel(file_path, dtype=str, keep_default_na=False)
                     encoding_used = 'Excel format'
-                    self.logger.logger.info(f"📄 Successfully read Excel file: {Path(file_path).name}")
+                    self.logger.logger.info(f"ðŸ“„ Successfully read Excel file: {Path(file_path).name}")
                 except Exception as excel_error:
                     raise Exception(f"Failed to read Excel file: {str(excel_error)}")
             else:
@@ -131,7 +132,7 @@ class CSVConnector:
                 raise Exception("No valid data found in file after cleaning")
 
             self.logger.logger.info(
-                f"📊 Successfully loaded {len(df)} rows and {len(df.columns)} columns from {Path(file_path).name} "
+                f"ðŸ“Š Successfully loaded {len(df)} rows and {len(df.columns)} columns from {Path(file_path).name} "
                 f"using {encoding_used}"
             )
             
@@ -142,7 +143,7 @@ class CSVConnector:
 
         except Exception as e:
             error_msg = f"Failed to read file {Path(file_path).name}: {str(e)}"
-            self.logger.logger.error(f"❌ {error_msg}")
+            self.logger.logger.error(f"âŒ {error_msg}")
             raise Exception(error_msg)
 
     def store_raw_data(self, df: pd.DataFrame, source_file: str, target_doctype: str) -> int:
@@ -153,7 +154,7 @@ class CSVConnector:
         try:
             # Set valid system user
             valid_user = "Administrator"  # Use your admin email
-            self.logger.logger.info(f"📦 Starting to store {total_rows} rows in buffer for {target_doctype}")
+            self.logger.logger.info(f"ðŸ“¦ Starting to store {total_rows} rows in buffer for {target_doctype}")
             
             batch_size = 50
             for batch_start in range(0, total_rows, batch_size):
@@ -183,20 +184,20 @@ class CSVConnector:
                         stored_count += 1
                         
                     except Exception as row_error:
-                        self.logger.logger.error(f"❌ Failed to store row {index}: {str(row_error)}")
+                        self.logger.logger.error(f"âŒ Failed to store row {index}: {str(row_error)}")
                         continue
                 
                 frappe.db.commit()
                 progress = (batch_end / total_rows) * 100
-                self.logger.logger.info(f"📦 Stored batch {batch_start}-{batch_end}: {progress:.1f}% complete")
+                self.logger.logger.info(f"ðŸ“¦ Stored batch {batch_start}-{batch_end}: {progress:.1f}% complete")
             
-            self.logger.logger.info(f"✅ Successfully stored {stored_count}/{total_rows} raw records in buffer")
+            self.logger.logger.info(f"âœ… Successfully stored {stored_count}/{total_rows} raw records in buffer")
             return stored_count
             
         except Exception as e:
             frappe.db.rollback()
             error_msg = f"Failed to store raw data: {str(e)}"
-            self.logger.logger.error(f"❌ {error_msg}")
+            self.logger.logger.error(f"âŒ {error_msg}")
             raise Exception(error_msg)
 
     def normalize_headers(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -215,136 +216,263 @@ class CSVConnector:
         df.columns = [header_mappings.get(col, col) for col in df.columns]
         return df
 
-    # PRIORITY 1 FIX: Enhanced upsert processing method
-    def process_buffered_data_with_upsert(self, target_doctype: str, batch_size: int = 100, *args, **kwargs) -> Dict[str, int]:
-        """PRIORITY 1: Enhanced processing with true upsert capability - Backward Compatible"""
-        results = {"success": 0, "failed": 0, "skipped": 0, "updated": 0}
-        # Ignore any extra arguments for backward compatibility
-        if args:
-            self.logger.logger.warning(f"⚠️ Extra positional arguments ignored: {args}")
-        if kwargs:
-            self.logger.logger.warning(f"⚠️ Extra keyword arguments ignored: {kwargs}")
-        try:
-            # Get pending records
-            pending_records = frappe.db.sql("""
-                SELECT name, raw_data, row_index, source_file
-                FROM `tabMigration Data Buffer`
-                WHERE target_doctype = %s AND processing_status = 'Pending'
-                ORDER BY row_index
-                LIMIT %s
-            """, (target_doctype, batch_size), as_dict=True)
-            if not pending_records:
-                return results
-            self.logger.logger.info(f"🔄 Processing {len(pending_records)} records with upsert for {target_doctype}")
-            meta = frappe.get_meta(target_doctype)
-            for record in pending_records:
-                try:
-                    # Parse and convert data
-                    raw_data = json.loads(record.raw_data)
-                    converted_data = self.apply_jit_conversion(raw_data, meta)
-                    # Validate data
-                    validation_errors = self.validate_and_clean_data(converted_data, meta)
-                    if validation_errors:
-                        error_msg = "; ".join(validation_errors)
-                        self._update_buffer_status(record.name, "Failed", error_msg)
-                        results["failed"] += 1
-                        continue
-                    # UPSERT LOGIC: Check if record exists
-                    existing_name = self._find_existing_record(converted_data, target_doctype)
-                    if existing_name:
-                        # UPDATE existing record
-                        try:
-                            existing_doc = frappe.get_doc(target_doctype, existing_name)
-                            # Update only non-empty fields from CSV
-                            for field, value in converted_data.items():
-                                if field != 'name' and value:  # Don't update name field
-                                    setattr(existing_doc, field, value)
-                            existing_doc.save(ignore_permissions=True)
-                            self._update_buffer_status(record.name, "Processed", f"Updated {existing_name}")
-                            results["updated"] += 1
-                            self.logger.logger.info(f"✅ Row {record.row_index}: Updated {existing_name}")
-                        except Exception as update_error:
-                            error_msg = f"Update failed: {str(update_error)[:200]}"
-                            self._update_buffer_status(record.name, "Failed", error_msg)
-                            results["failed"] += 1
-                            self.logger.logger.error(f"❌ Row {record.row_index}: {error_msg}")
-                    else:
-                        # INSERT new record
-                        try:
-                            doc_data = {"doctype": target_doctype}
-                            doc_data.update(converted_data)
-                            new_doc = frappe.get_doc(doc_data)
-                            new_doc.insert(ignore_permissions=True)
-                            self._update_buffer_status(record.name, "Processed", f"Created {new_doc.name}")
-                            results["success"] += 1
-                            self.logger.logger.info(f"✅ Row {record.row_index}: Created {new_doc.name}")
-                        except Exception as insert_error:
-                            error_msg = f"Insert failed: {str(insert_error)[:200]}"
-                            self._update_buffer_status(record.name, "Failed", error_msg)
-                            results["failed"] += 1
-                            self.logger.logger.error(f"❌ Row {record.row_index}: {error_msg}")
-                except Exception as record_error:
-                    error_msg = f"Record processing failed: {str(record_error)[:200]}"
-                    self._update_buffer_status(record.name, "Failed", error_msg)
-                    results["failed"] += 1
-                    self.logger.logger.error(f"❌ Row {record.row_index}: {error_msg}")
-            # Commit all changes
-            frappe.db.commit()
-            total_processed = sum(results.values())
-            self.logger.logger.info(f"✅ Batch completed: {results} | Total: {total_processed}")
-            return results
-        except Exception as e:
-            frappe.db.rollback()
-            self.logger.logger.error(f"💥 Batch processing failed: {str(e)}")
-            return results
 
+
+        # PRIORITY 1 FIX: Enhanced upsert processing method
+    
+    def updatebufferstatus(self, buffer_name: str, status: str, error_log: str = ""):
+        """  Update buffer record status with enhanced logging and error handling"""
+        try:
+             # Check field length limits
+             error_log = error_log[:1000] if error_log else ""  # Limit error log length
+         
+             if status == "Failed" and error_log:
+                 self.logger.logger.error(f"Buffer {buffer_name} failed: {error_log}")
+         
+             # Update the buffer record
+             frappe.db.sql("""
+                UPDATE `tabMigration Data Buffer` 
+                SET processing_status = %s, error_log = %s, processed_at = %s 
+                WHERE name = %s
+            """, (
+                status,
+                error_log,
+                now() if status in ["Processed", "Failed", "Skipped"] else None,
+                buffer_name
+            ))
+        
+             self.logger.logger.debug(f"Updated buffer {buffer_name} to status: {status}")
+
+        except Exception as e:
+            self.logger.logger.error(f"Failed to update buffer status: {str(e)}")
+
+    def process_buffered_data_with_upsert(self, target_doctype: str, batch_size: int = 100, *args, **kwargs) -> Dict[str, int]:
+            """
+            UPDATED: Enhanced processing with true upsert capability and duplicate prevention
+            """
+            results = {"success": 0, "failed": 0, "skipped": 0, "updated": 0}
+
+            # Clean up buffer duplicates first
+            self.cleanup_buffer_duplicates(target_doctype)
+
+            # Ensure Import Log table exists
+            self.create_import_log_table()
+
+            if args:
+                self.logger.logger.warning(f"Extra positional arguments ignored: {args}")
+            if kwargs:
+                self.logger.logger.warning(f"Extra keyword arguments ignored: {kwargs}")
+
+            try:
+                # Get pending records from buffer
+                pending_records = frappe.db.sql("""
+                    SELECT name, raw_data, row_index, source_file
+                    FROM `tabMigration Data Buffer` 
+                    WHERE target_doctype = %s AND processing_status = 'Pending' 
+                    ORDER BY row_index 
+                    LIMIT %s
+                """, (target_doctype, batch_size), as_dict=True)
+
+                if not pending_records:
+                    return results
+
+                self.logger.logger.info(f"Processing {len(pending_records)} records with intelligent upsert for {target_doctype}")
+
+                meta = frappe.get_meta(target_doctype)
+
+                for record in pending_records:
+                    try:
+                        if not record.raw_data:
+                            self.logger.logger.warning(f"Buffer {record.name}: Skipping record with empty raw_data")
+                            self.updatebufferstatus(record.name, "Failed", "Empty or null raw_data field")
+                            results["failed"] += 1
+                            continue
+
+                        try:
+                            raw_data = json.loads(record.raw_data)
+                            converted_data = self.apply_jit_conversion(raw_data, meta)
+                        except json.JSONDecodeError as e:
+                             self.logger.logger.error(f"Buffer {record.name}: Invalid JSON: {str(e)}")
+                             self.updatebufferstatus(record.name, "Failed", f"Invalid JSON: {str(e)}")
+                             results["failed"] += 1
+                             continue
+
+
+                        # Validate data
+                        validation_errors = self.validate_and_clean_data(converted_data, meta)
+                        if validation_errors:
+                            error_msg = "; ".join(validation_errors)
+                            self.updatebufferstatus(record.name, "Failed", error_msg)
+                            results["failed"] += 1
+                            continue
+
+                        # STEP 1: Compute hash for duplicate detection
+                        row_hash = self.compute_row_hash(raw_data)
+
+                        # STEP 2: Check if exact same data was already imported
+                        existing_import = self.is_row_already_imported(row_hash, record.source_file, target_doctype)
+
+                        if existing_import:
+                            self.logger.logger.info(f"Row {record.row_index}: Skipped - identical data already imported as {existing_import['record_name']}")
+                            self.updatebufferstatus(record.name, "Processed", f"Skipped - duplicate of {existing_import['record_name']}")
+                            results["skipped"] += 1
+                            continue
+
+                        # STEP 3: Find if record exists by business logic
+                        existing_name = self.find_existing_record_by_business_rules(converted_data, target_doctype)
+
+                        if existing_name:
+                            # STEP 4: Check if any field values have actually changed
+                            has_changes, changed_fields = self.detect_data_changes(converted_data, existing_name, target_doctype)
+
+                            if not has_changes:
+                                self.logger.logger.info(f"Row {record.row_index}: Skipped - no changes for {existing_name}")
+                                self.updatebufferstatus(record.name, "Processed", f"No changes - {existing_name}")
+                                # Log import to prevent future processing
+                                self.log_import_record(row_hash, record.source_file, target_doctype, existing_name, raw_data)
+                                results["skipped"] += 1
+                                continue
+
+                            # STEP 5: UPDATE existing record
+                            try:
+                                existing_doc = frappe.get_doc(target_doctype, existing_name)
+
+                                # Update only changed fields
+                                for field, value in converted_data.items():
+                                    if field != 'name' and field in changed_fields and value:
+                                        setattr(existing_doc, field, value)
+
+                                existing_doc.save(ignore_permissions=True)
+
+                                self.updatebufferstatus(record.name, "Processed", f"Updated {existing_name} - fields: {', '.join(changed_fields)}")
+                                results["updated"] += 1
+
+                                # Log the import
+                                self.log_import_record(row_hash, record.source_file, target_doctype, existing_name, raw_data)
+
+                                self.logger.logger.info(f"Row {record.row_index}: Updated {existing_name} - changed fields: {changed_fields}")
+
+                            except Exception as update_error:
+                                error_msg = f"Update failed: {str(update_error)[:200]}"
+                                self.updatebufferstatus(record.name, "Failed", error_msg)
+                                results["failed"] += 1
+                                self.logger.logger.error(f"Row {record.row_index}: {error_msg}")
+
+                        else:
+                            # STEP 6: INSERT new record
+                            try:
+                                # Ensure proper name field
+                                if 'name' not in converted_data:
+                                    converted_data['name'] = self.generate_meaningful_name(converted_data, target_doctype)
+
+                                doc_data = {"doctype": target_doctype}
+                                doc_data.update(converted_data)
+
+                                new_doc = frappe.get_doc(doc_data)
+                                new_doc.insert(ignore_permissions=True)
+
+                                self.updatebufferstatus(record.name, "Processed", f"Created {new_doc.name}")
+                                results["success"] += 1
+
+                                # Log the import
+                                self.log_import_record(row_hash, record.source_file, target_doctype, new_doc.name, raw_data)
+
+                                self.logger.logger.info(f"Row {record.row_index}: Created {new_doc.name}")
+
+                            except Exception as insert_error:
+                                error_msg = f"Insert failed: {str(insert_error)[:200]}"
+                                self.updatebufferstatus(record.name, "Failed", error_msg)
+                                results["failed"] += 1
+                                self.logger.logger.error(f"Row {record.row_index}: {error_msg}")
+
+                    except Exception as record_error:
+                        error_msg = f"Record processing failed: {str(record_error)[:200]}"
+                        self.updatebufferstatus(record.name, "Failed", error_msg)
+                        results["failed"] += 1
+                        self.logger.logger.error(f"Row {record.row_index}: {error_msg}")
+
+                frappe.db.commit()
+
+                total_processed = sum(results.values())
+                self.logger.logger.info(f"Intelligent upsert batch completed: {results} (Total: {total_processed})")
+                return results
+
+            except Exception as e:
+                frappe.db.rollback()
+                self.logger.logger.error(f"Batch processing failed: {str(e)}")
+                return results
 
     def _find_existing_record(self, converted_data: Dict[str, Any], doctype: str) -> Optional[str]:
-        """Find existing record using multiple strategies"""
-        
+        """FIXED: Enhanced duplicate detection with comprehensive strategy"""
+        self.logger.logger.info(f"ðŸ” Finding existing {doctype} record with data: {list(converted_data.keys())}")
         # Strategy 1: Check by name field if present
         if 'name' in converted_data and converted_data['name']:
             existing = frappe.db.get_value(doctype, converted_data['name'], 'name')
             if existing:
+                self.logger.logger.info(f"âœ… Found existing by name: {existing}")
                 return existing
-        
-        # Strategy 2: Check unique fields
-        meta = frappe.get_meta(doctype)
-        unique_fields = [f.fieldname for f in meta.fields if getattr(f, 'unique', False)]
-        
-        for field in unique_fields:
-            if field in converted_data and converted_data[field]:
-                existing = frappe.db.get_value(doctype, {field: converted_data[field]}, 'name')
-                if existing:
-                    return existing
-        
-        # Strategy 3: DocType-specific matching rules
+        # Strategy 2: Check unique fields from DocType meta
+        try:
+            meta = frappe.get_meta(doctype)
+            unique_fields = [f.fieldname for f in meta.fields if getattr(f, 'unique', False)]
+            self.logger.logger.info(f"ðŸ” Unique fields for {doctype}: {unique_fields}")
+            for field in unique_fields:
+                if field in converted_data and converted_data[field]:
+                    self.logger.logger.info(f"ðŸ” Checking unique field {field}='{converted_data[field]}'")
+                    existing = frappe.db.get_value(doctype, {field: converted_data[field]}, 'name')
+                    if existing:
+                        self.logger.logger.info(f"âœ… Found existing by {field}: {existing}")
+                        return existing
+        except Exception as e:
+            self.logger.logger.warning(f"âš ï¸ Error checking unique fields: {str(e)}")
+        # Strategy 3: DocType-specific duplicate rules
         duplicate_rules = self._get_doctype_duplicate_rules(doctype)
-        
         for rule in duplicate_rules:
             filters = {}
             rule_matched = True
-            
             for field in rule:
                 if field in converted_data and converted_data[field]:
                     filters[field] = converted_data[field]
                 else:
                     rule_matched = False
                     break
-            
             if rule_matched and filters:
-                existing = frappe.db.get_value(doctype, filters, 'name')
-                if existing:
-                    return existing
-        
+                self.logger.logger.info(f"ðŸ” Checking rule filters: {filters}")
+                try:
+                    existing = frappe.db.get_value(doctype, filters, 'name')
+                    if existing:
+                        self.logger.logger.info(f"âœ… Found existing by rule: {existing}")
+                        return existing
+                except Exception as e:
+                    self.logger.logger.warning(f"âš ï¸ Error with rule {filters}: {str(e)}")
+                    continue
+        # Strategy 4: Common ID patterns (for CSV imports)
+        id_patterns = [
+            'item_id', 'customer_id', 'supplier_id', 'contact_id', 'user_id',
+            'id', 'code', 'reference', 'external_id'
+        ]
+        for pattern in id_patterns:
+            if pattern in converted_data and converted_data[pattern]:
+                # Try to find by this pattern in various likely fields
+                potential_fields = [pattern, 'name', 'code', 'reference']
+                for field in potential_fields:
+                    try:
+                        if frappe.db.has_column(doctype, field):
+                            existing = frappe.db.get_value(doctype, {field: converted_data[pattern]}, 'name')
+                            if existing:
+                                self.logger.logger.info(f"âœ… Found existing by {field}={converted_data[pattern]}: {existing}")
+                                return existing
+                    except:
+                        continue
+        self.logger.logger.info(f"âŒ No existing record found for {doctype}")
         return None
 
     # PRIORITY 1 FIX: Enhanced field mapping with proper ID handling
     def apply_jit_conversion(self, raw_data: Dict[str, str], meta) -> Dict[str, Any]:
         """FIXED: Enhanced field mapping with proper error handling"""
         if meta.name == 'Service Category':
-            self.logger.logger.info(f"🔍 URGENT DEBUG: Raw data = {raw_data}")
-            self.logger.logger.info(f"🔍 URGENT DEBUG: Available fields = {[f.fieldname for f in meta.fields]}")
+            self.logger.logger.info(f"ðŸ” URGENT DEBUG: Raw data = {raw_data}")
+            self.logger.logger.info(f"ðŸ” URGENT DEBUG: Available fields = {[f.fieldname for f in meta.fields]}")
     
         
         converted_data = {}
@@ -354,23 +482,36 @@ class CSVConnector:
         field_mappings = {
             # ID fields - these should map to 'name' field for record identification
             'id': 'name',
-            'customer_id': 'name', 
+            'customer_id': 'name',
             'supplier_id': 'name',
             'item_id': 'item_code',  # For items, use item_code
             'contact_id': 'name',
             'user_id': 'name',
-            
-        'category_name': 'category_name',    # Direct mapping
-    'description': 'description',        # Direct mapping
-    'service_name': 'service_name',      # Direct mapping  
-    'vehicle_name': 'vehicle_name',      # Direct mapping
-    'addon_name': 'addon_name',          # Direct mapping
-    'default_price': 'default_price',    # Direct mapping
-    'price': 'default_price',            # Map price to default_price for Addon
-    'service_type': 'service_name',      # Map service_type to service_name
-    'vehicle_type': 'vehicle_name',      # Map vehicle_type to vehicle_name
-    
-      
+
+            'category_name': 'category_name',    # Direct mapping
+            'description': 'description',        # Direct mapping
+            'service_name': 'service_name',      # Direct mapping
+            'vehicle_name': 'vehicle_name',      # Direct mapping
+            'addon_name': 'addon_name',          # Direct mapping
+            'default_price': 'default_price',    # Direct mapping
+            'price': 'default_price',            # Map price to default_price for Addon
+            'service_type': 'service_name',      # Map service_type to service_name
+            'vehicle_type': 'vehicle_name',      # Map vehicle_type to vehicle_name
+            # CRITICAL: Yawlititem specific mappings
+            'Item ID': 'item_id',                # Map CSV "Item ID" to item_id field
+            'Item Name': 'item_name',            # Map CSV "Item Name" to item_name field
+            'Description': 'description',        # Direct mapping
+            'Rate': 'rate',                      # Map CSV "Rate" to rate field
+            'Status': 'is_active',               # Map Status to is_active
+            'Product Type': 'product_type',      # Direct mapping
+            'Usage unit': 'uom',                 # Map to UOM
+            'Unit Name': 'uom',                  # Alternative UOM mapping
+            'Purchase Rate': 'purchase_rate',    # Purchase rate mapping
+            'Purchase Account': 'purchase_account', # Purchase account
+            # Existing YAWLIT mappings...
+            'category_name': 'category_name',
+            'service_name': 'service_name',
+
             # Universal mappings
             'email': 'email_id',
             'phone': 'mobile_no',
@@ -508,7 +649,6 @@ class CSVConnector:
         }
         return mappings.get(target_doctype, {})
 
-
     def upsert_row(self, row_data: Dict, doctype: str, id_fields: List[str]) -> Dict[str, Any]:
             """Replace existing upsert method around line 400"""
             result = {"action": None, "record_name": None, "error": None}
@@ -552,26 +692,6 @@ class CSVConnector:
                 result = {"action": "failed", "error": str(e)}
             return result
     
-    def generate_meaningful_name(self, row_data: Dict, doctype: str, id_fields: List[str]) -> str:
-            """Generate meaningful names instead of random IDs"""
-            # Priority order for name generation
-            name_candidates = []
-            for field in id_fields:
-                if field in row_data and row_data[field]:
-                    clean_value = re.sub(r'[^a-zA-Z0-9\-_]', '_', str(row_data[field]))
-                    name_candidates.append(clean_value[:50])
-            if name_candidates:
-                base_name = name_candidates[0]
-                # Ensure uniqueness
-                counter = 1
-                final_name = base_name
-                while frappe.db.exists(doctype, final_name):
-                    final_name = f"{base_name}_{counter}"
-                    counter += 1
-                return final_name
-            # Fallback: use timestamp-based name
-            import time
-            return f"{doctype}_{int(time.time())}"
     
     def _generate_safe_name(self, raw_id: str, doctype: str) -> str:
         """Generate a safe, unique name from raw ID"""
@@ -787,6 +907,53 @@ class CSVConnector:
                 converted_data['is_active'] = 1
             if 'name' in converted_data and 'product_name' in converted_data:
                 del converted_data['name']
+
+        elif doctype_name == 'Yawlititem':
+            # Map Item ID to searchable field
+            if 'Item ID' in raw_data:
+                converted_data['item_id'] = raw_data['Item ID'].strip()
+            # Map Item Name
+            if 'Item Name' in raw_data:
+                converted_data['item_name'] = raw_data['Item Name'].strip()
+            # Map Description
+            if 'Description' in raw_data and raw_data['Description']:
+                converted_data['description'] = raw_data['Description'].strip()[:1000]  # Limit length
+            # Map Rate (clean currency format)
+            if 'Rate' in raw_data:
+                rate_str = raw_data['Rate'].replace('INR ', '').replace(',', '').strip()
+                try:
+                    converted_data['rate'] = float(rate_str)
+                except (ValueError, TypeError):
+                    converted_data['rate'] = 0.0
+            # Map Status to is_active
+            if 'Status' in raw_data:
+                converted_data['is_active'] = 1 if raw_data['Status'].lower() == 'active' else 0
+            else:
+                converted_data['is_active'] = 1  # Default to active
+            # Map Product Type
+            if 'Product Type' in raw_data:
+                converted_data['product_type'] = raw_data['Product Type']
+            # Map Usage unit to UOM
+            if 'Usage unit' in raw_data and raw_data['Usage unit']:
+                converted_data['uom'] = raw_data['Usage unit']
+            elif 'Unit Name' in raw_data and raw_data['Unit Name']:
+                converted_data['uom'] = raw_data['Unit Name']
+            else:
+                converted_data['uom'] = 'Nos'  # Default UOM
+            # Map Purchase Rate
+            if 'Purchase Rate' in raw_data:
+                purchase_rate = raw_data['Purchase Rate'].replace('INR ', '').replace(',', '').strip()
+                try:
+                    converted_data['purchase_rate'] = float(purchase_rate)
+                except (ValueError, TypeError):
+                    converted_data['purchase_rate'] = 0.0
+            # Map Purchase Account
+            if 'Purchase Account' in raw_data and raw_data['Purchase Account']:
+                converted_data['purchase_account'] = raw_data['Purchase Account']
+            # Remove name field if it conflicts with auto-naming
+            if 'name' in converted_data and ('item_name' in converted_data or 'item_id' in converted_data):
+                del converted_data['name']
+            self.logger.logger.info(f"ðŸ”§ Yawlititem processing: {converted_data}")
         elif doctype_name == 'Expense':
             # EXISTING EXPENSE HANDLING (keep unchanged)
             if 'employee' not in converted_data:
@@ -805,41 +972,93 @@ class CSVConnector:
                 converted_data['company'] = frappe.db.get_single_value('Global Defaults', 'default_company')
         return converted_data
 
-
+    
     def _get_doctype_duplicate_rules(self, doctype: str) -> List[List[str]]:
-        """Get DocType-specific duplicate detection rules"""
+        """FIXED: Comprehensive DocType-specific duplicate detection rules"""
+    
         rules_map = {
-            'Supplier': [
-                ['supplier_name'],
-                ['email_id'],
-                ['tax_id']
-            ],
-            'Customer': [
-                ['customer_name'],
-                ['email_id'],
-                ['tax_id']
-            ],
-            'Item': [
-                ['item_code'],
-                ['item_name', 'item_group']
-            ],
-            'Contact': [
-                ['email_id'],
-                ['mobile_no'],
-                ['first_name', 'last_name', 'company_name']
-            ],
-            'Address': [
-                ['address_line1', 'city', 'pincode'],
-                ['address_title']
-            ],
-            'Lead': [
-                ['email_id'],
-                ['mobile_no'],
-                ['lead_name', 'company_name']
-            ]
-        }
+           # Standard Frappe DocTypes
+          'Supplier': [
+            ['supplier_name'],
+            ['email_id'],
+            ['tax_id'],
+            ['supplier_name', 'company']
+          ],
+           'Customer': [
+            ['customer_name'],
+            ['email_id'], 
+            ['tax_id'],
+            ['customer_name', 'customer_type']
+           ],
+          'Item': [
+            ['item_code'],
+            ['item_name'],
+            ['item_code', 'item_group']
+           ],
+          'Contact': [
+            ['email_id'],
+            ['mobile_no'],
+            ['first_name', 'last_name'],
+            ['first_name', 'last_name', 'company_name']
+           ],
+          'Address': [
+            ['address_line1', 'city', 'pincode'],
+            ['address_title']
+           ],
+          'Lead': [
+            ['email_id'],
+            ['mobile_no'],
+            ['lead_name'],
+            ['lead_name', 'company_name']
+          ],
         
+           # YAWLIT Custom DocTypes
+           'Service Category': [
+             ['category_name'],
+             ['category_name', 'is_active']
+           ],
+            'Service Type': [
+             ['service_name'],
+             ['service_name', 'is_subscription']
+            ],
+            'Vehicle Type': [
+             ['vehicle_name'],
+             ['vehicle_name', 'is_active']
+            ],
+            'Addon': [
+             ['addon_name'],
+             ['addon_name', 'default_price']
+            ],
+            'Product': [
+            ['product_name'],
+            ['product_name', 'service_category'],
+            ['product_name', 'vehicle_type', 'service_type']
+          ],
+        
+            # CRITICAL: Yawlititem (the problem DocType!)
+         'Yawlititem': [
+            ['item_id'],              # Primary - Item ID from CSV
+            ['item_name'],            # Secondary - Item Name
+            ['item_code'],            # Tertiary - if mapped
+            ['item_id', 'item_name'], # Combination fallback
+            ['name']                  # Direct name match
+          ],
+        
+          # Other potential DocTypes
+           'User': [
+            ['email'],
+            ['username'],
+            ['full_name', 'email']
+           ],
+          'Employee': [
+            ['employee_name'],
+            ['user_id'],
+            ['employee_number']
+          ]
+        }
+    
         return rules_map.get(doctype, [])
+    
 
     def validate_and_clean_data(self, data: Dict[str, Any], meta) -> List[str]:
         """ENHANCED: Comprehensive data validation with better error messages"""
@@ -907,7 +1126,7 @@ class CSVConnector:
         try:
             # Also log to console for debugging
             if status == "Failed" and error_log:
-               self.logger.logger.error(f"❌ Buffer {buffer_name} failed: {error_log}")
+               self.logger.logger.error(f"âŒ Buffer {buffer_name} failed: {error_log}")
              
             frappe.db.sql("""
                 UPDATE `tabMigration Data Buffer`
@@ -922,7 +1141,7 @@ class CSVConnector:
                 buffer_name
             ))
         except Exception as e:
-            self.logger.logger.error(f"❌ Failed to update buffer status: {str(e)}")
+            self.logger.logger.error(f"âŒ Failed to update buffer status: {str(e)}")
 
     def get_buffer_statistics(self, target_doctype: str = None) -> Dict[str, Any]:
         """ENHANCED: Get comprehensive buffer statistics"""
@@ -988,13 +1207,13 @@ class CSVConnector:
             return result
             
         except Exception as e:
-            self.logger.logger.error(f"❌ Failed to get buffer statistics: {str(e)}")
+            self.logger.logger.error(f"âŒ Failed to get buffer statistics: {str(e)}")
             return {"error": str(e), "total_records": 0}
 
     def cleanup_processed_buffer(self, days_old: int = 7) -> int:
         """ENHANCED: Clean up old processed records with better logging"""
         try:
-            cutoff_date = frappe.utils.add_days(now(), -days_old)
+            cutoff_date = frappe.utils.add_to_date(now(), -days_old)
             
             # Get count before deletion for reporting
             count_query = """
@@ -1007,7 +1226,7 @@ class CSVConnector:
             records_to_delete = count_result[0]['count'] if count_result else 0
             
             if records_to_delete == 0:
-                self.logger.logger.info("🧹 No old buffer records to clean up")
+                self.logger.logger.info("ðŸ§¹ No old buffer records to clean up")
                 return 0
             
             # Delete old records
@@ -1019,11 +1238,11 @@ class CSVConnector:
             frappe.db.sql(delete_query, cutoff_date)
             frappe.db.commit()
             
-            self.logger.logger.info(f"🧹 Cleaned up {records_to_delete} old buffer records (older than {days_old} days)")
+            self.logger.logger.info(f"ðŸ§¹ Cleaned up {records_to_delete} old buffer records (older than {days_old} days)")
             return records_to_delete
             
         except Exception as e:
-            self.logger.logger.error(f"❌ Buffer cleanup failed: {str(e)}")
+            self.logger.logger.error(f"âŒ Buffer cleanup failed: {str(e)}")
             return 0
     
     def create_import_log_table(self):
@@ -1043,13 +1262,35 @@ class CSVConnector:
             )
             """)
     
+    def compute_row_hash(self, row_data: Dict, exclude_fields: List[str] = None) -> str:
+        """
+         NEW: Compute deterministic hash for row data with proper handling
+         """
+        if exclude_fields is None:
+           exclude_fields = ['name', 'creation', 'modified', 'modified_by', 'owner']
 
-    def compute_row_hash(self, row_data: Dict) -> str:
-        """Compute deterministic hash for row data"""
-        # Sort keys and create consistent string representation
-        sorted_items = sorted([(k, str(v).strip()) for k, v in row_data.items() if v])
-        row_string = '|'.join([f"{k}:{v}" for k, v in sorted_items])
-        return hashlib.md5(row_string.encode('utf-8')).hexdigest()
+          # Clean and normalize data for consistent hashing
+        clean_data = {}
+        for key, value in row_data.items():
+            if key not in exclude_fields:
+              # Handle None, empty strings, and normalize values
+              if value is None or value == '' or (isinstance(value, str) and not value.strip()):
+                 clean_data[key] = ''
+            else:
+                # Convert to string and normalize
+                from frappe.utils import cstr
+                clean_value = cstr(value).strip().lower()
+                # Remove common variations that shouldn't affect hash
+                clean_value = re.sub(r'\s+', ' ', clean_value)  # Normalize spaces
+                clean_data[key] = clean_value
+
+        # Sort keys for consistent ordering
+        sorted_items = sorted(clean_data.items())
+        row_string = '|'.join(f"{k}={v}" for k, v in sorted_items)
+
+        import hashlib
+        return hashlib.sha256(row_string.encode('utf-8')).hexdigest()[:16]
+    
 
     def is_duplicate_row(self, row_hash: str, source_file: str) -> bool:
         """Check if exact same row was imported before"""
@@ -1237,4 +1478,226 @@ class CSVConnector:
         return 0
     
 
+    def cleanup_buffer_duplicates(self, target_doctype: str):
+            """Clean up duplicate buffer records before processing"""
+            try:
+                # Remove old processed records
+                frappe.db.sql("""
+                    DELETE FROM `tabMigration Data Buffer` 
+                    WHERE target_doctype = %s 
+                    AND processing_status IN ('Processed', 'Failed')
+                    AND DATE(created_at) < DATE_SUB(NOW(), INTERVAL 1 DAY)
+                """, (target_doctype,))
 
+                # Find and remove duplicate pending records (keep only latest)
+                duplicates = frappe.db.sql("""
+                    SELECT raw_data, COUNT(*) as count, 
+                           GROUP_CONCAT(name ORDER BY created_at DESC) as names
+                    FROM `tabMigration Data Buffer`
+                    WHERE target_doctype = %s AND processing_status = 'Pending'
+                    GROUP BY raw_data
+                    HAVING count > 1
+                """, (target_doctype,), as_dict=True)
+
+                for duplicate in duplicates:
+                    names_list = duplicate['names'].split(',')
+                    # Keep the first (latest), delete the rest
+                    names_to_delete = names_list[1:]
+
+                    if names_to_delete:
+                        frappe.db.sql(f"""
+                            DELETE FROM `tabMigration Data Buffer` 
+                            WHERE name IN ({','.join(['%s'] * len(names_to_delete))})
+                        """, names_to_delete)
+
+                        self.logger.logger.info(f"ðŸ§¹ Removed {len(names_to_delete)} duplicate buffer records")
+
+                frappe.db.commit()
+
+            except Exception as e:
+                self.logger.logger.error(f"âŒ Buffer cleanup failed: {str(e)}")
+
+    def create_import_log_table(self):
+        """NEW: Create Import Log table if it doesn't exist"""
+        try:
+            frappe.db.sql("""
+              CREATE TABLE IF NOT EXISTS `tabImport Log` (
+                 `name` VARCHAR(140) PRIMARY KEY,
+                 `source_file` VARCHAR(255),
+                 `row_hash` VARCHAR(32),
+                 `doctype` VARCHAR(140),
+                 `record_name` VARCHAR(140),
+                 `import_timestamp` DATETIME,
+                 `session_id` VARCHAR(20),
+                 `row_data_json` LONGTEXT,
+                 INDEX `idx_row_hash` (`row_hash`),
+                 INDEX `idx_source_file` (`source_file`),
+                 INDEX `idx_doctype_hash` (`doctype`, `row_hash`)
+                )
+            """)
+            frappe.db.commit()
+        except Exception as e:
+          self.logger.logger.warning(f"Import Log table might already exist: {str(e)}")
+
+    def is_row_already_imported(self, row_hash: str, source_file: str, doctype: str) -> Optional[Dict]:
+        """
+        NEW: Check if exact same row data was already imported
+        Returns existing record info if found, None if new
+        """
+        try:
+            existing = frappe.db.sql("""
+              SELECT record_name, import_timestamp, row_data_json
+              FROM `tabImport Log`
+              WHERE row_hash = %s AND source_file = %s AND doctype = %s
+              ORDER BY import_timestamp DESC
+              LIMIT 1
+            """, (row_hash, source_file, doctype), as_dict=True)
+
+            return existing[0] if existing else None
+
+        except Exception as e:
+            self.logger.logger.warning(f"Error checking import log: {str(e)}")
+            return None
+
+    def log_import_record(self, row_hash: str, source_file: str, doctype: str, 
+                     record_name: str, row_data: Dict):
+        """NEW: Log imported record to prevent future duplicates"""
+        try:
+            if not hasattr(self, 'import_session_id'):
+               self.import_session_id = frappe.generate_hash()[:8]
+
+            log_name = f"IMPORT-{self.import_session_id}-{frappe.generate_hash()[:8]}"
+
+            frappe.db.sql("""
+                INSERT INTO `tabImport Log` 
+                (name, source_file, row_hash, doctype, record_name, import_timestamp, session_id, row_data_json)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE
+                record_name = VALUES(record_name),
+                import_timestamp = VALUES(import_timestamp)
+            """, (
+               log_name,
+               source_file,
+               row_hash,
+               doctype,
+               record_name,
+               now(),
+               self.import_session_id,
+               json.dumps(row_data, default=str)
+         ))
+
+        except Exception as e:
+           self.logger.logger.warning(f"Failed to log import record: {str(e)}")
+
+    def detect_data_changes(self, new_data: Dict, existing_record_name: str, doctype: str) -> Tuple[bool, List[str]]:
+        """ NEW: Detect if any field values have actually changed
+        Returns: (has_changes, list_of_changed_fields)
+        """
+        try:
+            existing_doc = frappe.get_doc(doctype, existing_record_name)
+            changed_fields = []
+
+            for field_name, new_value in new_data.items():
+                if field_name == 'name':
+                  continue
+
+                 # Get current value from existing doc
+                current_value = getattr(existing_doc, field_name, None)
+
+                  # Normalize values for comparison
+                from frappe.utils import cstr
+                new_val_normalized = cstr(new_value).strip() if new_value else ""
+                current_val_normalized = cstr(current_value).strip() if current_value else ""
+
+                # Check for actual changes
+                if new_val_normalized != current_val_normalized:
+                   changed_fields.append(field_name)
+
+            return len(changed_fields) > 0, changed_fields
+
+        except Exception as e:
+            self.logger.logger.warning(f"Error detecting changes: {str(e)}")
+            return True, []  # Assume changes if we can't detect
+
+    def find_existing_record_by_business_rules(self, converted_data: Dict[str, Any], doctype: str) -> Optional[str]:
+        """
+        IMPROVED: Find existing record using business logic (not hash-based)
+        This identifies the same logical entity that might have updated data
+        """
+        try:
+            # Strategy 1: Check by name field if present and valid
+            if 'name' in converted_data and converted_data['name']:
+                if frappe.db.exists(doctype, converted_data['name']):
+                    return converted_data['name']
+
+            # Strategy 2: Check unique fields from DocType metadata
+            meta = frappe.get_meta(doctype)
+            unique_fields = [f.fieldname for f in meta.fields if getattr(f, 'unique', False)]
+
+            for field in unique_fields:
+                if field in converted_data and converted_data[field]:
+                    existing = frappe.db.get_value(doctype, {field: converted_data[field]}, 'name')
+                    if existing:
+                        return existing
+
+            # Strategy 3: DocType-specific business rules
+            business_rules = self.get_doctype_business_rules(doctype)
+
+            for rule_fields in business_rules:
+                if all(field in converted_data and converted_data[field] for field in rule_fields):
+                    filters = {field: converted_data[field] for field in rule_fields}
+                    existing = frappe.db.get_value(doctype, filters, 'name')
+                    if existing:
+                        return existing
+
+            return None
+
+        except Exception as e:
+            self.logger.logger.warning(f"Error finding existing record: {str(e)}")
+            return None
+
+
+    def get_doctype_business_rules(self, doctype: str) -> List[List[str]]:
+        """NEW: Define business rules for identifying duplicate records"""
+        rules_map = {
+            "Customer": [["customer_name"], ["email_id"], ["mobile_no"]],
+            "Supplier": [["supplier_name"], ["email_id"], ["tax_id"]],
+            "Item": [["item_code"], ["item_name", "item_group"]],
+            "Contact": [["email_id"], ["mobile_no"], ["first_name", "last_name", "company_name"]],
+            "Address": [["address_line1", "city", "pincode"]],
+            "Lead": [["email_id"], ["mobile_no"], ["lead_name", "company_name"]],
+            # Your custom DocTypes
+            "Service Category": [["categoryname"], ["categoryid"]],
+            "Service Type": [["servicename"], ["servicetypeid"]],
+            "Vehicle Type": [["vehiclename"], ["vehicletypeid"]],
+            "Product": [["productname"], ["productid"]],
+            "Addon": [["addonname"], ["addonid"]]
+        }
+
+        return rules_map.get(doctype, [])
+   
+    def generate_meaningful_name(self, data: Dict, doctype: str) -> str:
+        """NEW: Generate meaningful record names instead of random IDs"""
+        # Priority fields for generating names
+        name_priority = ['id', 'code', 'email', 'mobile', 'phone', 'customer_name', 'supplier_name', 'item_code']
+ 
+        for field in name_priority:
+            if field in data and data[field]:
+              from frappe.utils import cstr
+              base_name = cstr(data[field]).strip()[:50]  # Limit length
+              return self.ensure_unique_name(base_name, doctype)
+
+         # Fallback to DocType with timestamp
+        import uuid
+        return f"{doctype}-{str(uuid.uuid4())[:8]}"
+
+    def ensure_unique_name(self, base_name: str, doctype: str) -> str:
+        """NEW: Ensure the generated name is unique"""
+        counter = 1
+        final_name = base_name
+
+        while frappe.db.exists(doctype, final_name):
+          final_name = f"{base_name}-{counter}"
+          counter += 1
+
+        return final_name

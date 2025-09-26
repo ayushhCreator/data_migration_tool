@@ -1,4 +1,4 @@
-import frappe
+import frappe,json
 from frappe.model.document import Document
 
 class CSVSchemaRegistry(Document):
@@ -16,3 +16,4 @@ class CSVSchemaRegistry(Document):
         # Ensure target DocType exists
         if not frappe.db.exists('DocType', self.target_doctype):
             frappe.throw(f"DocType '{self.target_doctype}' does not exist")
+    

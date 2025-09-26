@@ -335,34 +335,6 @@ def get_buffer_statistics():
         return {"status": "error", "message": str(e)}
 
 
-@frappe.whitelist()
-def import_yawlit_services(csv_file_path=None):
-    """API endpoint to trigger Yawlit service import"""
-    try:
-        from data_migration_tool.data_migration.importers.yawlit_importer import YawlitImporter
-        
-        if not csv_file_path:
-            # Look for Yawlit files in upload directory
-            import os
-            from frappe.utils import get_site_path
-            
-            files_dir = get_site_path("private", "files")
-            for file in os.listdir(files_dir):
-                if "yawlit" in file.lower() and "service" in file.lower():
-                    csv_file_path = os.path.join(files_dir, file)
-                    break
-        
-        if not csv_file_path:
-            return {"status": "error", "message": "No Yawlit CSV file found"}
-        
-        importer = YawlitImporter()
-        result = importer.import_from_csv(csv_file_path)
-        
-        return result
-        
-    except Exception as e:
-        frappe.log_error(str(e), "Yawlit Import API Error")
-        return {"status": "error", "message": str(e)}
 
 @frappe.whitelist()
 def get_product_catalog():
@@ -433,4 +405,61 @@ def manual_csv_processing():
         
     except Exception as e:
         frappe.log_error(f"Manual CSV processing failed: {str(e)}")
+        return {"status": "error", "message": str(e)}
+    
+
+@frappe.whitelist()
+def get_import_statistics(source_file=None):
+    """Get comprehensive import statistics"""
+    try:
+        conditions = ["1=1"]
+        params = []
+
+        if source_file:
+            conditions.append("source_file = %s")
+            params.append(source_file)
+
+        where_clause = " AND ".join(conditions)
+
+        stats = frappe.db.sql(f"""
+            SELECT 
+                doctype,
+                source_file,
+                COUNT(*) as total_imports,
+                COUNT(DISTINCT row_hash) as unique_rows,
+                MIN(import_timestamp) as first_import,
+                MAX(import_timestamp) as latest_import
+            FROM `tabImport Log`
+            WHERE {where_clause}
+            GROUP BY doctype, source_file
+            ORDER BY latest_import DESC
+        """, params, as_dict=True)
+
+        summary = {
+            "import_sessions": len(set([s.get('source_file') for s in stats])),
+            "total_records": sum([s.get('total_imports', 0) for s in stats]),
+            "by_doctype": {},
+            "recent_imports": stats[:10]
+        }
+
+        # Group by DocType
+        for stat in stats:
+            doctype = stat.get('doctype')
+            if doctype not in summary["by_doctype"]:
+                summary["by_doctype"][doctype] = {
+                    "total": 0,
+                    "files": 0,
+                    "latest": None
+                }
+
+            summary["by_doctype"][doctype]["total"] += stat.get('total_imports', 0)
+            summary["by_doctype"][doctype]["files"] += 1
+
+            latest = stat.get('latest_import')
+            if not summary["by_doctype"][doctype]["latest"] or latest > summary["by_doctype"][doctype]["latest"]:
+                summary["by_doctype"][doctype]["latest"] = latest
+
+        return {"status": "success", "data": summary}
+
+    except Exception as e:
         return {"status": "error", "message": str(e)}

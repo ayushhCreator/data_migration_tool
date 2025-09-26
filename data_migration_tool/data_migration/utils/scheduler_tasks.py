@@ -2,7 +2,7 @@
 import os
 import shutil
 import frappe
-from frappe.utils import now, add_days, get_datetime
+from frappe.utils import now, add_to_date, get_datetime
 from pathlib import Path
 from typing import Dict, Any, List, Tuple, Optional
 import hashlib
@@ -11,6 +11,15 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 import re
+
+
+# Add after existing imports:
+try:
+    from data_migration_tool.data_migration.connectors.csv_connector import CSVConnector
+    CSV_CONNECTOR_AVAILABLE = True
+except ImportError as e:
+    frappe.log_error(f"CSVConnector import failed: {str(e)}")
+    CSV_CONNECTOR_AVAILABLE = False
 
 
 # Add this to scheduler_tasks.py after existing imports
@@ -511,19 +520,6 @@ def process_data_with_intelligent_merge(csv_connector, target_doctype, df, setti
     return total_results
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
 def convert_numpy_types(obj):
     """Recursively convert numpy types to Python native types for JSON serialization."""
     if isinstance(obj, dict):
@@ -544,6 +540,10 @@ def convert_numpy_types(obj):
 def periodic_crm_sync():
     """Main scheduled function for CRM synchronization with JIT processing"""
     from data_migration_tool.data_migration.utils.logger_config import migration_logger
+    
+    if not CSV_CONNECTOR_AVAILABLE:
+        migration_logger.logger.error("❌ CSVConnector not available - skipping CSV processing") 
+        return
     
     try:
         migration_logger.logger.info("🚀 Starting periodic CRM sync with JIT processing")
@@ -1571,7 +1571,7 @@ def cleanup_old_logs():
     from data_migration_tool.data_migration.utils.logger_config import migration_logger
     
     try:
-        cutoff_date = frappe.utils.add_days(now(), -30)
+        cutoff_date = frappe.utils.add_to_date(now(), -30)
         
         # Clean up old buffer records
         try:

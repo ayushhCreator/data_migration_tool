@@ -1,0 +1,139 @@
+{
+    "actions": [],
+    "allow_copy": 0,
+    "allow_events_in_timeline": 0,
+    "allow_guest_to_view": 0,
+    "allow_import": 1,
+    "allow_rename": 1,
+    "autoname": "field:doctype_name",
+    "beta": 0,
+    "creation": "2025-09-26 09:28:00.000000",
+    "default_view": "List",
+    "doctype": "DocType",
+    "editable_grid": 1,
+    "engine": "InnoDB",
+    "field_order": [
+        "doctype_name",
+        "allow_duplicates",
+        "column_break_1",
+        "enabled",
+        "priority",
+        "section_break_1",
+        "unique_fields",
+        "business_rules",
+        "section_break_2",
+        "description",
+        "notes"
+    ],
+    "fields": [
+        {
+            "fieldname": "doctype_name",
+            "fieldtype": "Link",
+            "in_list_view": 1,
+            "label": "DocType Name",
+            "options": "DocType",
+            "reqd": 1,
+            "unique": 1
+        },
+        {
+            "default": "0",
+            "fieldname": "allow_duplicates",
+            "fieldtype": "Check",
+            "in_list_view": 1,
+            "label": "Allow Duplicates"
+        },
+        {
+            "fieldname": "column_break_1",
+            "fieldtype": "Column Break"
+        },
+        {
+            "default": "1",
+            "fieldname": "enabled",
+            "fieldtype": "Check",
+            "in_list_view": 1,
+            "label": "Enabled"
+        },
+        {
+            "default": "5",
+            "fieldname": "priority",
+            "fieldtype": "Int",
+            "label": "Priority"
+        },
+        {
+            "collapsible": 1,
+            "fieldname": "section_break_1",
+            "fieldtype": "Section Break",
+            "label": "Advanced Configuration"
+        },
+        {
+            "description": "JSON Array of field names that must be unique. Example: [\"email\", \"phone\"]",
+            "fieldname": "unique_fields",
+            "fieldtype": "JSON",
+            "label": "Unique Fields (JSON Array)"
+        },
+        {
+            "description": "JSON Array of field combinations for business rules. Example: [[\"customer_name\", \"email\"], [\"phone\"]]",
+            "fieldname": "business_rules",
+            "fieldtype": "JSON",
+            "label": "Business Rules (JSON Array)"
+        },
+        {
+            "fieldname": "section_break_2",
+            "fieldtype": "Section Break",
+            "label": "Documentation"
+        },
+        {
+            "fieldname": "description",
+            "fieldtype": "Text",
+            "label": "Description"
+        },
+        {
+            "fieldname": "notes",
+            "fieldtype": "Text Editor",
+            "label": "Notes"
+        }
+    ],
+    "index_web_pages_for_search": 1,
+    "links": [],
+    "modified": "2025-09-26 09:28:00.000000",
+    "modified_by": "Administrator",
+    "module": "Data Migration Tool",
+    "name": "Duplication Policy",
+    "naming_rule": "By fieldname",
+    "owner": "Administrator",
+    "permissions": [
+        {
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "export": 1,
+            "print": 1,
+            "read": 1,
+            "report": 1,
+            "role": "System Manager",
+            "share": 1,
+            "write": 1
+        },
+        {
+            "create": 1,
+            "email": 1,
+            "export": 1,
+            "print": 1,
+            "read": 1,
+            "report": 1,
+            "role": "Data Migration Manager",
+            "share": 1,
+            "write": 1
+        }
+    ],
+    "quick_entry": 1,
+    "restrict_to_domain": "Data Migration",
+    "show_name_in_global_search": 1,
+    "sort_field": "priority",
+    "sort_order": "ASC",
+    "states": [],
+    "title_field": "doctype_name",
+    "track_changes": 1,
+    "track_seen": 1,
+    "track_views": 1
+}

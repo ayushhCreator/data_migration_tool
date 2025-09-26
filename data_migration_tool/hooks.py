@@ -56,6 +56,7 @@ api_methods = [
     "data_migration_tool.data_migration.api.get_existing_doctypes",
     "data_migration_tool.data_migration.api.get_job_status",
     "data_migration_tool.data_migration.connectors.csv_connector.get_buffer_statistics",
+    "data_migration_tool.data_migration.api.get_import_statistics",
     "data_migration_tool.data_migration.utils.scheduler_tasks.manual_csv_processing",
 ]
 
