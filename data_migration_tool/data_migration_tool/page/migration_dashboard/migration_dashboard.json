@@ -1,0 +1,29 @@
+{
+ "content": null,
+ "creation": "2025-09-27 15:23:00",
+ "docstatus": 0,
+ "doctype": "Page",
+ "idx": 0,
+ "modified": "2025-09-27 19:21:03.794915",
+ "modified_by": "Administrator",
+ "module": "Data Migration Tool",
+ "name": "migration_dashboard",
+ "owner": "Administrator",
+ "page_name": "migration_dashboard",
+ "roles": [
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "Administrator"
+  },
+  {
+   "role": "All"
+  }
+ ],
+ "script": null,
+ "standard": "Yes",
+ "style": null,
+ "system_page": 0,
+ "title": "Migration Dashboard"
+}

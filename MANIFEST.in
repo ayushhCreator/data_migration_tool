@@ -1,0 +1,11 @@
+# Place this file at: ./MANIFEST.in (root directory)
+include README.md
+include license.txt
+include requirements.txt
+recursive-include data_migration_tool *.py
+recursive-include data_migration_tool *.js
+recursive-include data_migration_tool *.css
+recursive-include data_migration_tool *.json
+recursive-include data_migration_tool *.md
+recursive-include data_migration_tool *.txt
+recursive-include fixtures *.json

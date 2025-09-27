@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 import re
 
+from data_migration_tool.data_migration_tool.doctype.csv_schema_registry.csv_schema_registry import get_field_mappings_from_registry
 
 # Add after existing imports:
 try:

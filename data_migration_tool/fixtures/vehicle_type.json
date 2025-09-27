@@ -1,0 +1,29 @@
+[
+ {
+  "description": null,
+  "docstatus": 0,
+  "doctype": "Vehicle Type",
+  "is_active": 1,
+  "modified": "2025-09-25 16:12:54.830797",
+  "name": "HatchBack",
+  "vehicle_name": "HatchBack"
+ },
+ {
+  "description": null,
+  "docstatus": 0,
+  "doctype": "Vehicle Type",
+  "is_active": 1,
+  "modified": "2025-09-25 16:12:54.839840",
+  "name": "Sedan/SUV",
+  "vehicle_name": "Sedan/SUV"
+ },
+ {
+  "description": null,
+  "docstatus": 0,
+  "doctype": "Vehicle Type",
+  "is_active": 1,
+  "modified": "2025-09-25 16:12:54.844519",
+  "name": "Luxury",
+  "vehicle_name": "Luxury"
+ }
+]

@@ -1,23 +1,48 @@
 [project]
 name = "data_migration_tool"
 authors = [
-    { name = "Ayush", email = "araj09510@gmail.com"}
+    { name = "Ayush Raj", email = "araj09510@gmail.com"}
 ]
-description = "Migrate Data"
+description = "Comprehensive data migration solution for Frappe/ERPNext - supports CSV, Odoo, Zoho CRM and custom connectors"
 requires-python = ">=3.10"
 readme = "README.md"
 dynamic = ["version"]
+license = { text = "MIT" }
+keywords = ["frappe", "erpnext", "data-migration", "etl", "odoo", "zoho"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11", 
+    "Programming Language :: Python :: 3.12",
+    "Framework :: Frappe",
+    "Topic :: Database :: Front-Ends",
+]
+
 dependencies = [
+    "requests>=2.28.0",
+    "pandas>=1.5.0",
+    "python-dateutil>=2.8.0",
     # "frappe~=15.0.0" # Installed and managed by bench.
 ]
+
+[project.urls]
+Homepage = "https://github.com/ayushhCreator/data_migration_tool"
+Repository = "https://github.com/ayushhCreator/data_migration_tool"
+Issues = "https://github.com/ayushhCreator/data_migration_tool/issues"
 
 [build-system]
 requires = ["flit_core >=3.4,<4"]
 build-backend = "flit_core.buildapi"
 
-# These dependencies are only installed when developer mode is enabled
+# Development dependencies
 [tool.bench.dev-dependencies]
 # package_name = "~=1.1.0"
+
+# APT dependencies for Frappe Cloud
+[tool.frappe-cloud.apt-dependencies]
+packages = []
 
 [tool.ruff]
 line-length = 110
@@ -26,7 +51,7 @@ target-version = "py310"
 [tool.ruff.lint]
 select = [
     "F",
-    "E",
+    "E", 
     "W",
     "I",
     "UP",

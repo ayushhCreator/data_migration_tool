@@ -1,0 +1,7 @@
+# Core dependencies for data migration functionality
+requests>=2.28.0
+pandas>=1.5.0
+xmlrpc2>=0.3.1
+python-dateutil>=2.8.0
+# Optional: uncomment if you need specific versions
+# frappe>=15.0.0  # Managed by bench
