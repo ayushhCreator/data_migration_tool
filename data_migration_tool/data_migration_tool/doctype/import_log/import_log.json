@@ -1,0 +1,117 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2025-10-01 03:30:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "import_session",
+  "source_file",
+  "target_doctype",
+  "record_name",
+  "row_hash",
+  "import_timestamp",
+  "action_taken",
+  "raw_data_preview",
+  "error_message"
+ ],
+ "fields": [
+  {
+   "fieldname": "import_session",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Import Session",
+   "length": 50,
+   "reqd": 1
+  },
+  {
+   "fieldname": "source_file",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Source File",
+   "length": 200,
+   "reqd": 1
+  },
+  {
+   "fieldname": "target_doctype",
+   "fieldtype": "Link",
+   "label": "Target DocType",
+   "options": "DocType",
+   "reqd": 1
+  },
+  {
+   "fieldname": "record_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Record Name",
+   "length": 140
+  },
+  {
+   "fieldname": "row_hash",
+   "fieldtype": "Data",
+   "label": "Row Hash",
+   "length": 32,
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "import_timestamp",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Import Timestamp",
+   "reqd": 1
+  },
+  {
+   "fieldname": "action_taken",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Action Taken",
+   "options": "Inserted\nUpdated\nSkipped",
+   "reqd": 1
+  },
+  {
+   "fieldname": "raw_data_preview",
+   "fieldtype": "Text",
+   "label": "Raw Data Preview"
+  },
+  {
+   "fieldname": "error_message",
+   "fieldtype": "Text",
+   "label": "Error Message"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2025-10-01 03:30:00.000000",
+ "modified_by": "Administrator",
+ "module": "Data Migration Tool",
+ "name": "Import Log",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Data Migration User",
+   "share": 1
+  }
+ ],
+ "quick_entry": 1,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

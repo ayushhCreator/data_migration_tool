@@ -1,0 +1,250 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:migration_setting_name",
+ "creation": "2025-09-11 09:30:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "migration_setting_name",
+  "zoho_section",
+  "enable_zoho_sync",
+  "zoho_client_id",
+  "zoho_client_secret",
+  "zoho_refresh_token",
+  "column_break_6",
+  "zoho_modules",
+  "csv_section",
+  "enable_csv_processing",
+  "csv_watch_directory",
+  "auto_create_doctypes",
+  "column_break_11",
+  "csv_chunk_size",
+  "doctype_match_threshold",
+  "odoo_section",
+  "enable_odoo_sync",
+  "odoo_url",
+  "odoo_database",
+  "odoo_username",
+  "odoo_password",
+  "general_section",
+  "last_sync_time",
+  "sync_frequency",
+  "enable_performance_monitoring",
+  "max_concurrent_jobs",
+  "created_by",
+  "require_user_permission_for_doctype_creation",
+  "dashboard_html"
+ ],
+ "fields": [
+  {
+   "fieldname": "zoho_section",
+   "fieldtype": "Section Break",
+   "label": "Zoho CRM Configuration"
+  },
+  {
+   "default": "0",
+   "fieldname": "enable_zoho_sync",
+   "fieldtype": "Check",
+   "label": "Enable Zoho Sync"
+  },
+  {
+   "depends_on": "enable_zoho_sync",
+   "fieldname": "zoho_client_id",
+   "fieldtype": "Data",
+   "label": "Zoho Client ID",
+   "mandatory_depends_on": "enable_zoho_sync"
+  },
+  {
+   "depends_on": "enable_zoho_sync",
+   "fieldname": "zoho_client_secret",
+   "fieldtype": "Password",
+   "label": "Zoho Client Secret",
+   "mandatory_depends_on": "enable_zoho_sync"
+  },
+  {
+   "depends_on": "enable_zoho_sync",
+   "fieldname": "zoho_refresh_token",
+   "fieldtype": "Password",
+   "label": "Zoho Refresh Token",
+   "mandatory_depends_on": "enable_zoho_sync"
+  },
+  {
+   "fieldname": "column_break_6",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "enable_zoho_sync",
+   "fieldname": "zoho_modules",
+   "fieldtype": "Table",
+   "label": "Zoho Modules Configuration",
+   "options": "Zoho Module Config"
+  },
+  {
+   "fieldname": "csv_section",
+   "fieldtype": "Section Break",
+   "label": "CSV/Excel Processing Configuration"
+  },
+  {
+   "default": "0",
+   "fieldname": "enable_csv_processing",
+   "fieldtype": "Check",
+   "label": "Enable CSV Processing"
+  },
+  {
+   "depends_on": "enable_csv_processing",
+   "fieldname": "csv_watch_directory",
+   "fieldtype": "Data",
+   "label": "CSV Watch Directory",
+   "mandatory_depends_on": "enable_csv_processing"
+  },
+  {
+   "default": "1",
+   "depends_on": "enable_csv_processing",
+   "fieldname": "auto_create_doctypes",
+   "fieldtype": "Check",
+   "label": "Auto Create DocTypes from CSV"
+  },
+  {
+   "fieldname": "column_break_11",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1000",
+   "depends_on": "enable_csv_processing",
+   "fieldname": "csv_chunk_size",
+   "fieldtype": "Int",
+   "label": "CSV Processing Chunk Size"
+  },
+  {
+   "default": "80",
+   "depends_on": "enable_csv_processing",
+   "fieldname": "doctype_match_threshold",
+   "fieldtype": "Percent",
+   "label": "DocType Match Threshold",
+   "description": "Minimum similarity percentage required to automatically use existing DocType (default: 80%)"
+  },
+  {
+   "fieldname": "odoo_section",
+   "fieldtype": "Section Break",
+   "label": "Odoo Integration Configuration"
+  },
+  {
+   "default": "0",
+   "fieldname": "enable_odoo_sync",
+   "fieldtype": "Check",
+   "label": "Enable Odoo Sync"
+  },
+  {
+   "depends_on": "enable_odoo_sync",
+   "fieldname": "odoo_url",
+   "fieldtype": "Data",
+   "label": "Odoo Server URL",
+   "mandatory_depends_on": "enable_odoo_sync"
+  },
+  {
+   "depends_on": "enable_odoo_sync",
+   "fieldname": "odoo_database",
+   "fieldtype": "Data",
+   "label": "Odoo Database Name",
+   "mandatory_depends_on": "enable_odoo_sync"
+  },
+  {
+   "depends_on": "enable_odoo_sync",
+   "fieldname": "odoo_username",
+   "fieldtype": "Data",
+   "label": "Odoo Username",
+   "mandatory_depends_on": "enable_odoo_sync"
+  },
+  {
+   "depends_on": "enable_odoo_sync",
+   "fieldname": "odoo_password",
+   "fieldtype": "Password",
+   "label": "Odoo Password",
+   "mandatory_depends_on": "enable_odoo_sync"
+  },
+  {
+   "fieldname": "general_section",
+   "fieldtype": "Section Break",
+   "label": "General Settings"
+  },
+  {
+   "fieldname": "last_sync_time",
+   "fieldtype": "Datetime",
+   "label": "Last Sync Time",
+   "read_only": 1
+  },
+  {
+   "default": "Hourly",
+   "fieldname": "sync_frequency",
+   "fieldtype": "Select",
+   "label": "Sync Frequency",
+   "options": "Every 15 minutes\nEvery 30 minutes\nHourly\nEvery 6 hours\nDaily"
+  },
+  {
+   "default": "1",
+   "fieldname": "enable_performance_monitoring",
+   "fieldtype": "Check",
+   "label": "Enable Performance Monitoring"
+  },
+  {
+   "fieldname": "created_by",
+   "fieldtype": "Link",
+   "label": "Created By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "default": "5",
+   "fieldname": "max_concurrent_jobs",
+   "fieldtype": "Int",
+   "label": "Max Concurrent Migration Jobs"
+  },
+  {
+   "default": "1",
+   "description": "If enabled, system will ask for user permission before creating new DocTypes",
+   "fieldname": "require_user_permission_for_doctype_creation",
+   "fieldtype": "Check",
+   "label": "Require User Permission for DocType Creation"
+  },
+  {
+   "fieldname": "dashboard_html",
+   "fieldtype": "HTML",
+   "label": "Dashboard",
+   "read_only": 1
+  },
+  {
+   "fieldname": "migration_setting_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Migration Setting Name",
+   "reqd": 1,
+   "unique": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2025-09-19 14:22:22.902186",
+ "modified_by": "Administrator",
+ "module": "data_migration_tool",
+ "name": "Migration Settings",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

@@ -1,0 +1,66 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2025-09-11 09:30:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "enabled",
+  "module_name",
+  "target_doctype",
+  "sync_direction",
+  "last_sync_count"
+ ],
+ "fields": [
+  {
+   "default": "1",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Enabled"
+  },
+  {
+   "fieldname": "module_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Zoho Module Name",
+   "reqd": 1
+  },
+  {
+   "fieldname": "target_doctype",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Target DocType",
+   "options": "DocType"
+  },
+  {
+   "default": "Import Only",
+   "fieldname": "sync_direction",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Sync Direction",
+   "options": "Import Only\nExport Only\nBidirectional"
+  },
+  {
+   "fieldname": "last_sync_count",
+   "fieldtype": "Int",
+   "label": "Last Sync Record Count",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2025-09-27 16:40:02.084857",
+ "modified_by": "Administrator",
+ "module": "Data Migration Tool",
+ "name": "Zoho Module Config",
+ "naming_rule": "Random",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

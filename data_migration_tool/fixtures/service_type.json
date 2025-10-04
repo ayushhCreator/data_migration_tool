@@ -1,0 +1,12 @@
+[
+ {
+  "description": "Subscription-based service For Cars",
+  "docstatus": 0,
+  "doctype": "Service Type",
+  "is_active": 1,
+  "is_subscription": 1,
+  "modified": "2025-09-26 08:36:05.125525",
+  "name": "subscription",
+  "service_name": "subscription"
+ }
+]

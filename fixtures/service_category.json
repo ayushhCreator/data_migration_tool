@@ -1,0 +1,5 @@
+[
+    {"doctype": "Service Category", "category_name": "Wash", "description": "Car washing services", "is_active": 1},
+    {"doctype": "Service Category", "category_name": "Polishing", "description": "Car polishing services", "is_active": 1},
+    {"doctype": "Service Category", "category_name": "Detailing", "description": "Car detailing services", "is_active": 1}
+]

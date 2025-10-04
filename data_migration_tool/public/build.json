@@ -1,0 +1,8 @@
+{
+    "css/data_migration_tool.css": [
+        "public/css/data_migration_tool.css"
+    ],
+    "js/data_migration_tool.js": [
+        "public/js/data_migration_tool.js"
+    ]
+}
