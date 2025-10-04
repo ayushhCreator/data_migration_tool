@@ -1,29 +1,32 @@
 [
  {
+  "service_category_id": 1,
   "category_name": "Wash",
   "description": "Car washing services updated to check the data duplication bug",
   "docstatus": 0,
   "doctype": "Service Category",
   "is_active": 1,
-  "modified": "2025-09-26 08:29:52.983713",
+  "modified": "2025-10-04 15:30:00.000000",
   "name": "Wash"
  },
  {
+  "service_category_id": 2,
   "category_name": "Polishing",
   "description": "Car polishing services for the cars",
   "docstatus": 0,
   "doctype": "Service Category",
   "is_active": 1,
-  "modified": "2025-09-26 08:29:53.042942",
+  "modified": "2025-10-04 15:30:00.000000",
   "name": "Polishing"
  },
  {
+  "service_category_id": 3,
   "category_name": "Detailing",
   "description": "Car detailing services powered by yawlit",
   "docstatus": 0,
   "doctype": "Service Category",
   "is_active": 1,
-  "modified": "2025-09-26 08:29:53.052092",
+  "modified": "2025-10-04 15:30:00.000000",
   "name": "Detailing"
  }
 ]

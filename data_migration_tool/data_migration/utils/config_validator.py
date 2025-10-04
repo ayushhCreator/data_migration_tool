@@ -45,25 +45,25 @@ class ConfigValidator:
                 if chunk_size < 10 or chunk_size > 50000:
                     errors.append("CSV chunk size must be between 10 and 50000")
         
-        # Validate Zoho settings
-        if settings.enable_zoho_sync:
-            required_zoho_fields = ['zoho_client_id', 'zoho_client_secret', 'zoho_refresh_token']
-            for field in required_zoho_fields:
-                if not getattr(settings, field, None):
-                    errors.append(f"Zoho {field.replace('_', ' ').title()} is required when Zoho sync is enabled")
+        # # Validate Zoho settings
+        # if settings.enable_zoho_sync:
+        #     required_zoho_fields = ['zoho_client_id', 'zoho_client_secret', 'zoho_refresh_token']
+        #     for field in required_zoho_fields:
+        #         if not getattr(settings, field, None):
+        #             errors.append(f"Zoho {field.replace('_', ' ').title()} is required when Zoho sync is enabled")
         
-        # Validate Odoo settings
-        if settings.enable_odoo_sync:
-            required_odoo_fields = ['odoo_url', 'odoo_database', 'odoo_username', 'odoo_password']
-            for field in required_odoo_fields:
-                if not getattr(settings, field, None):
-                    errors.append(f"Odoo {field.replace('_', ' ').title()} is required when Odoo sync is enabled")
+        # # Validate Odoo settings
+        # if settings.enable_odoo_sync:
+        #     required_odoo_fields = ['odoo_url', 'odoo_database', 'odoo_username', 'odoo_password']
+        #     for field in required_odoo_fields:
+        #         if not getattr(settings, field, None):
+        #             errors.append(f"Odoo {field.replace('_', ' ').title()} is required when Odoo sync is enabled")
             
-            # Validate URL format
-            if settings.odoo_url:
-                url_pattern = r'^https?://[^\s/$.?#].[^\s]*$'
-                if not re.match(url_pattern, settings.odoo_url):
-                    errors.append("Odoo URL format is invalid")
+        #     # Validate URL format
+        #     if settings.odoo_url:
+        #         url_pattern = r'^https?://[^\s/$.?#].[^\s]*$'
+        #         if not re.match(url_pattern, settings.odoo_url):
+        #             errors.append("Odoo URL format is invalid")
         
         # Validate performance settings
         if settings.max_concurrent_jobs:

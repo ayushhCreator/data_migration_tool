@@ -25,9 +25,9 @@ class MigrationSettings(Document):
             pass
         
         self.validate_basic_settings()
-        self.validate_zoho_config()
+        # self.validate_zoho_config()
         self.validate_csv_config()
-        self.validate_odoo_config()
+        # self.validate_odoo_config()
         self.validate_performance_settings()
         self.validate_auto_detection_settings()  # NE
         # Removed validate_jit_settings() - causing issues with non-existent fields
@@ -50,18 +50,18 @@ class MigrationSettings(Document):
                 frappe.throw("Maximum Concurrent Jobs should not exceed 20")
             self.max_concurrent_jobs = max_jobs
 
-    def validate_zoho_config(self):
-        """Validate Zoho configuration"""
-        if self.enable_zoho_sync:
-            required_fields = [
-                ('zoho_client_id', 'Zoho Client ID'),
-                ('zoho_client_secret', 'Zoho Client Secret'),
-                ('zoho_refresh_token', 'Zoho Refresh Token')
-            ]
+    # def validate_zoho_config(self):
+    #     """Validate Zoho configuration"""
+    #     if self.enable_zoho_sync:
+    #         required_fields = [
+    #             ('zoho_client_id', 'Zoho Client ID'),
+    #             ('zoho_client_secret', 'Zoho Client Secret'),
+    #             ('zoho_refresh_token', 'Zoho Refresh Token')
+    #         ]
             
-            for field, label in required_fields:
-                if not getattr(self, field, None):
-                    frappe.throw(f"{label} is required when Zoho sync is enabled")
+    #         for field, label in required_fields:
+    #             if not getattr(self, field, None):
+    #                 frappe.throw(f"{label} is required when Zoho sync is enabled")
 
     def validate_csv_config(self):
         """Enhanced CSV configuration validation"""
@@ -118,24 +118,24 @@ class MigrationSettings(Document):
         except Exception as e:
             frappe.throw(f"CSV directory lacks proper read/write permissions: {str(e)}")
 
-    def validate_odoo_config(self):
-        """Validate Odoo configuration"""
-        if self.enable_odoo_sync:
-            required_fields = [
-                ('odoo_url', 'Odoo Server URL'),
-                ('odoo_database', 'Odoo Database Name'),
-                ('odoo_username', 'Odoo Username'),
-                ('odoo_password', 'Odoo Password')
-            ]
+    # def validate_odoo_config(self):
+    #     """Validate Odoo configuration"""
+    #     if self.enable_odoo_sync:
+    #         required_fields = [
+    #             ('odoo_url', 'Odoo Server URL'),
+    #             ('odoo_database', 'Odoo Database Name'),
+    #             ('odoo_username', 'Odoo Username'),
+    #             ('odoo_password', 'Odoo Password')
+    #         ]
             
-            for field, label in required_fields:
-                if not getattr(self, field, None):
-                    frappe.throw(f"{label} is required when Odoo sync is enabled")
+    #         for field, label in required_fields:
+    #             if not getattr(self, field, None):
+    #                 frappe.throw(f"{label} is required when Odoo sync is enabled")
             
-            if self.odoo_url:
-                if not (self.odoo_url.startswith('http://') or self.odoo_url.startswith('https://')):
-                    frappe.throw("Odoo Server URL must start with http:// or https://")
-                self.odoo_url = self.odoo_url.rstrip('/')
+    #         if self.odoo_url:
+    #             if not (self.odoo_url.startswith('http://') or self.odoo_url.startswith('https://')):
+    #                 frappe.throw("Odoo Server URL must start with http:// or https://")
+    #             self.odoo_url = self.odoo_url.rstrip('/')
 
     def validate_performance_settings(self):
         """Validate performance and monitoring settings"""
@@ -191,29 +191,29 @@ class MigrationSettings(Document):
            self.doctype_match_threshold = threshold
 
 
-    @frappe.whitelist()
-    def test_zoho_connection(self):
-        """Test Zoho connection"""
-        if not self.enable_zoho_sync:
-            return {"status": "error", "message": "Zoho sync is not enabled"}
+    # @frappe.whitelist()
+    # def test_zoho_connection(self):
+    #     """Test Zoho connection"""
+    #     if not self.enable_zoho_sync:
+    #         return {"status": "error", "message": "Zoho sync is not enabled"}
         
-        try:
-            # Simplified connection test without complex imports
-            return {"status": "success", "message": "Zoho configuration appears valid"}
-        except Exception as e:
-            return {"status": "error", "message": str(e)}
+    #     try:
+    #         # Simplified connection test without complex imports
+    #         return {"status": "success", "message": "Zoho configuration appears valid"}
+    #     except Exception as e:
+    #         return {"status": "error", "message": str(e)}
 
-    @frappe.whitelist()
-    def test_odoo_connection(self):
-        """Test Odoo connection"""
-        if not self.enable_odoo_sync:
-            return {"status": "error", "message": "Odoo sync is not enabled"}
+    # @frappe.whitelist()
+    # def test_odoo_connection(self):
+    #     """Test Odoo connection"""
+    #     if not self.enable_odoo_sync:
+    #         return {"status": "error", "message": "Odoo sync is not enabled"}
         
-        try:
-            # Simplified connection test
-            return {"status": "success", "message": "Odoo configuration appears valid"}
-        except Exception as e:
-            return {"status": "error", "message": str(e)}
+    #     try:
+    #         # Simplified connection test
+    #         return {"status": "success", "message": "Odoo configuration appears valid"}
+    #     except Exception as e:
+    #         return {"status": "error", "message": str(e)}
 
     @frappe.whitelist()
     def test_csv_directory(self):

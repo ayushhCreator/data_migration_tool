@@ -12,7 +12,13 @@
   "is_active"
  ],
  "fields": [
-  {
+    {
+     "fieldname": "service_type_id",
+     "fieldtype": "Int",
+     "label": "Service Type ID",
+     "reqd": 1
+    },
+   {
    "fieldname": "service_name",
    "fieldtype": "Data",
    "label": "Service Type Name",

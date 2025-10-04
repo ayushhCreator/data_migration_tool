@@ -6,11 +6,21 @@
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
+  "vehicle_type_id",
   "vehicle_name",
   "description",
   "is_active"
  ],
  "fields": [
+  {
+   "fieldname": "vehicle_type_id",
+   "fieldtype": "Int",
+   "label": "Vehicle Type ID",
+   "reqd": 1,
+   "unique": 1,
+   "in_list_view": 1,
+   "default": 0
+  },
   {
    "fieldname": "vehicle_name",
    "fieldtype": "Data",
@@ -34,7 +44,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-09-18 15:00:00.000000",
+ "modified": "2025-10-04 15:30:00.000000",
  "modified_by": "Administrator",
  "module": "Data Migration Tool",
  "name": "Vehicle Type",

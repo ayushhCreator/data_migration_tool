@@ -1,88 +1,69 @@
-// Enhanced Migration Settings JavaScript - Phase 1
+// Enhanced Migration Settings JavaScript - CSV/Excel Processing Focus
+// Zoho and Odoo features temporarily disabled - Coming in future updates
+
 frappe.ui.form.on('Migration Settings', {
     refresh: function(frm) {
-        // Add enhanced custom buttons with better error handling
-        frm.add_custom_button(__('Test Zoho Connection'), function() {
-            test_connection(frm, 'zoho');
-        }, __('Test Connections'));
-
-        frm.add_custom_button(__('Test Odoo Connection'), function() {
-            test_connection(frm, 'odoo');
-        }, __('Test Connections'));
+        // === CSV/EXCEL PROCESSING BUTTONS (ACTIVE) ===
 
         frm.add_custom_button(__('Test CSV Directory'), function() {
             test_connection(frm, 'csv');
         }, __('Test Connections'));
 
-        frm.add_custom_button(__('Trigger Zoho Sync'), function() {
-            trigger_sync(frm, 'zoho');
-        }, __('Manual Sync'));
+        frm.add_custom_button(__("Intelligent CSV Processing"), function() {
+            frappe.confirm(
+                'Are you sure you want to start intelligent CSV processing? This will analyze and automatically process CSV files with smart field mapping.',
+                function() {
+                    frappe.show_alert({
+                        message: __('Starting intelligent CSV processing...'),
+                        indicator: 'blue'
+                    });
 
-        frm.add_custom_button(__('Trigger Odoo Sync'), function() {
-            trigger_sync(frm, 'odoo');
-        }, __('Manual Sync'));
+                    frappe.call({
+                        method: 'trigger_intelligent_processing',
+                        doc: frm.doc,
+                        callback: function(r) {
+                            if (r.message && r.message.status === 'success') {
+                                frappe.show_alert({
+                                    message: __(r.message.message),
+                                    indicator: 'green'
+                                });
 
-       // Replace the existing "Process CSV Files" button with this enhanced version
-frm.add_custom_button(__("Intelligent CSV Processing"), function() {
-    frappe.confirm(
-        'Are you sure you want to start intelligent CSV processing? This will analyze and automatically process CSV files with smart field mapping.',
-        function() {
-            frappe.show_alert({
-                message: __('Starting intelligent CSV processing...'),
-                indicator: 'blue'
-            });
-            
-            frappe.call({
-                method: 'trigger_intelligent_processing',
-                doc: frm.doc,
-                callback: function(r) {
-                    if (r.message && r.message.status === 'success') {
-                        frappe.show_alert({
-                            message: __(r.message.message),
-                            indicator: 'green'
-                        });
-                        
-                        // Show processing details
-                        frappe.msgprint({
-                            title: __('Processing Started'),
-                            message: `
-                                <p><strong>Files Found:</strong> ${r.message.files_found}</p>
-                                <p><strong>Job ID:</strong> ${r.message.job_id}</p>
-                                <p>The system will intelligently analyze CSV headers and create appropriate DocTypes.</p>
-                                <p><em>Check Migration Status for updates.</em></p>
-                            `,
-                            indicator: 'blue'
-                        });
-                        
-                        // Auto-refresh status after 5 seconds
-                        if (r.message.job_id) {
-                            setTimeout(() => check_job_status(r.message.job_id), 5000);
+                                frappe.msgprint({
+                                    title: __('Processing Started'),
+                                    message: `
+**Files Found:** ${r.message.files_found || 0}
+**Job ID:** ${r.message.job_id || 'N/A'}
+
+The system will intelligently analyze CSV headers and create appropriate DocTypes.
+`,
+                                    indicator: 'blue'
+                                });
+
+                                if (r.message.job_id) {
+                                    setTimeout(() => check_job_status(r.message.job_id), 5000);
+                                }
+                            } else {
+                                frappe.msgprint({
+                                    title: __('Processing Failed'),
+                                    message: r.message ? r.message.message : 'Failed to start intelligent processing',
+                                    indicator: 'red'
+                                });
+                            }
+                        },
+                        error: function(r) {
+                            frappe.msgprint({
+                                title: __('Processing Error'),
+                                message: 'Failed to trigger intelligent processing. Please try again.',
+                                indicator: 'red'
+                            });
                         }
-                    } else {
-                        frappe.msgprint({
-                            title: __('Processing Failed'),
-                            message: r.message ? r.message.message : 'Failed to start intelligent processing',
-                            indicator: 'red'
-                        });
-                    }
-                },
-                error: function(r) {
-                    frappe.msgprint({
-                        title: __('Processing Error'),
-                        message: 'Failed to trigger intelligent processing. Please try again.',
-                        indicator: 'red'
                     });
                 }
-            });
-        }
-    );
-}, __("Manual Sync"));
+            );
+        }, __("CSV Processing"));
 
-        frm.add_custom_button(__('Full Sync'), function() {
-            trigger_sync(frm, 'all');
-        }, __('Manual Sync'));
+        // === MONITORING BUTTONS (ACTIVE) ===
 
-        // NEW: Add monitoring buttons
         frm.add_custom_button(__('Migration Status'), function() {
             show_migration_status(frm);
         }, __('Monitoring'));
@@ -95,25 +76,87 @@ frm.add_custom_button(__("Intelligent CSV Processing"), function() {
             show_buffer_statistics(frm);
         }, __('Monitoring'));
 
+        // === ZOHO/ODOO BUTTONS (DISABLED - COMING SOON) ===
+
+        // Zoho Connection Test - Disabled
+        frm.add_custom_button(__('Test Zoho Connection (Coming Soon)'), function() {
+            frappe.msgprint({
+                title: __('Feature Coming Soon'),
+                message: `
+<div style="text-align: center; padding: 20px;">
+    <p style="font-size: 16px; margin-bottom: 15px;">🚀 <strong>Zoho Integration</strong></p>
+    <p>This feature is under development and will be available in a future update.</p>
+    <p style="margin-top: 15px; color: #888;">Currently focusing on CSV/Excel processing capabilities.</p>
+</div>
+`,
+                indicator: 'blue'
+            });
+        }, __('Future Updates'));
+
+        // Odoo Connection Test - Disabled
+        frm.add_custom_button(__('Test Odoo Connection (Coming Soon)'), function() {
+            frappe.msgprint({
+                title: __('Feature Coming Soon'),
+                message: `
+<div style="text-align: center; padding: 20px;">
+    <p style="font-size: 16px; margin-bottom: 15px;">🚀 <strong>Odoo Integration</strong></p>
+    <p>This feature is under development and will be available in a future update.</p>
+    <p style="margin-top: 15px; color: #888;">Currently focusing on CSV/Excel processing capabilities.</p>
+</div>
+`,
+                indicator: 'blue'
+            });
+        }, __('Future Updates'));
+
         // Add enhanced migration dashboard
         add_enhanced_migration_dashboard(frm);
 
         // Initialize real-time updates
         setup_realtime_updates(frm);
+
+        // Hide/Show Zoho and Odoo sections based on enable checkboxes
+        toggle_zoho_odoo_sections(frm);
     },
 
     enable_zoho_sync: function(frm) {
-        frm.toggle_reqd(['zoho_client_id', 'zoho_client_secret', 'zoho_refresh_token'], frm.doc.enable_zoho_sync);
+        // Don't make fields required, just show a message
+        if (frm.doc.enable_zoho_sync) {
+            frappe.msgprint({
+                title: __('Zoho Sync - Coming Soon'),
+                message: 'Zoho synchronization is currently under development. Please uncheck this option for now.',
+                indicator: 'blue'
+            });
+            // Auto-disable it
+            frm.set_value('enable_zoho_sync', 0);
+        }
+        toggle_zoho_odoo_sections(frm);
     },
 
     enable_odoo_sync: function(frm) {
-        frm.toggle_reqd(['odoo_url', 'odoo_database', 'odoo_username', 'odoo_password'], frm.doc.enable_odoo_sync);
+        // Don't make fields required, just show a message
+        if (frm.doc.enable_odoo_sync) {
+            frappe.msgprint({
+                title: __('Odoo Sync - Coming Soon'),
+                message: 'Odoo synchronization is currently under development. Please uncheck this option for now.',
+                indicator: 'blue'
+            });
+            // Auto-disable it
+            frm.set_value('enable_odoo_sync', 0);
+        }
+        toggle_zoho_odoo_sections(frm);
     },
 
     enable_csv_processing: function(frm) {
         frm.toggle_reqd(['csv_watch_directory'], frm.doc.enable_csv_processing);
     }
 });
+
+// Helper function to hide Zoho and Odoo sections
+function toggle_zoho_odoo_sections(frm) {
+    // Hide Zoho and Odoo sections when not enabled
+    frm.toggle_display('zoho_section', false); // Always hide for now
+    frm.toggle_display('odoo_section', false); // Always hide for now
+}
 
 function test_connection(frm, source) {
     frappe.show_alert({
@@ -130,11 +173,20 @@ function test_connection(frm, source) {
                     message: `${source.toUpperCase()} connection successful`,
                     indicator: 'green'
                 });
-                
+
                 if (r.message.details) {
                     frappe.msgprint({
                         title: __('Connection Details'),
-                        message: `<pre>${JSON.stringify(r.message.details, null, 2)}</pre>`,
+                        message: `
+**Status:** Connected
+
+**Details:**
+\`\`\`
+${JSON.stringify(r.message.details, null, 2)}
+\`\`\`
+
+*Check Migration Status for updates.*
+`,
                         indicator: 'green'
                     });
                 }
@@ -156,48 +208,19 @@ function test_connection(frm, source) {
     });
 }
 
-function trigger_sync(frm, source) {
-    frappe.confirm(
-        __(`Are you sure you want to trigger ${source} sync manually? This may take some time.`),
-        function() {
-            frappe.show_alert({
-                message: `Starting ${source} sync...`,
-                indicator: 'blue'
-            });
-
-            frappe.call({
-                method: 'data_migration_tool.data_migration.api.trigger_manual_sync',
-                args: { source: source },
-                callback: function(r) {
-                    if (r.message && r.message.status === 'success') {
-                        frappe.show_alert({
-                            message: r.message.message,
-                            indicator: 'green'
-                        });
-                        
-                        if (r.message.job_name) {
-                            setTimeout(() => {
-                                check_job_status(r.message.job_name);
-                            }, 2000);
-                        }
-                    } else {
-                        frappe.msgprint({
-                            title: __('Sync Failed'),
-                            message: r.message ? r.message.message : 'Failed to start sync',
-                            indicator: 'red'
-                        });
-                    }
-                },
-                error: function(r) {
-                    frappe.msgprint({
-                        title: __('Sync Error'),
-                        message: 'Failed to trigger sync. Please try again.',
-                        indicator: 'red'
-                    });
-                }
-            });
+function check_job_status(job_id) {
+    frappe.call({
+        method: 'data_migration_tool.data_migration.api.get_job_status',
+        args: { job_id: job_id },
+        callback: function(r) {
+            if (r.message) {
+                frappe.show_alert({
+                    message: `Job Status: ${r.message.status}`,
+                    indicator: r.message.status === 'completed' ? 'green' : 'blue'
+                });
+            }
         }
-    );
+    });
 }
 
 function show_migration_status(frm) {
@@ -414,36 +437,36 @@ function add_enhanced_migration_dashboard(frm) {
     if (frm.doc.enable_odoo_sync) active_sources.push('Odoo');
     if (frm.doc.enable_csv_processing) active_sources.push('CSV');
     
-    let dashboard_html = `
-        <div class="migration-dashboard">
-            <div class="row">
-                <div class="col-sm-4">
-                    <div class="card">
-                        <div class="card-body">
-                            <h6><i class="fa fa-clock-o"></i> Last Sync</h6>
-                            <p>${last_sync_formatted}</p>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-sm-4">
-                    <div class="card">
-                        <div class="card-body">
-                            <h6><i class="fa fa-cogs"></i> Active Sources</h6>
-                            <p>${active_sources.length > 0 ? active_sources.join(', ') : 'None configured'}</p>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-sm-4">
-                    <div class="card">
-                        <div class="card-body">
-                            <h6><i class="fa fa-refresh"></i> Sync Frequency</h6>
-                            <p>${frm.doc.sync_frequency || 'Not set'}</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
+    // let dashboard_html = `
+    //     <div class="migration-dashboard">
+    //         <div class="row">
+    //             <div class="col-sm-4">
+    //                 <div class="card">
+    //                     <div class="card-body">
+    //                         <h6><i class="fa fa-clock-o"></i> Last Sync</h6>
+    //                         <p>${last_sync_formatted}</p>
+    //                     </div>
+    //                 </div>
+    //             </div>
+    //             <div class="col-sm-4">
+    //                 <div class="card">
+    //                     <div class="card-body">
+    //                         <h6><i class="fa fa-cogs"></i> Active Sources</h6>
+    //                         <p>${active_sources.length > 0 ? active_sources.join(', ') : 'None configured'}</p>
+    //                     </div>
+    //                 </div>
+    //             </div>
+    //             <div class="col-sm-4">
+    //                 <div class="card">
+    //                     <div class="card-body">
+    //                         <h6><i class="fa fa-refresh"></i> Sync Frequency</h6>
+    //                         <p>${frm.doc.sync_frequency || 'Not set'}</p>
+    //                     </div>
+    //                 </div>
+    //             </div>
+    //         </div>
+    //     </div>
+    // `;
     
     $(frm.fields_dict['dashboard_html'].wrapper).html(dashboard_html);
 }
@@ -613,3 +636,9 @@ function show_manual_request_dialog(result) {
     });
     d.show();
 }
+
+
+
+
+
+

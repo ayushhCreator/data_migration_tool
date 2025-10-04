@@ -40,19 +40,19 @@
    "label": "Custom Price",
    "precision": "2"
   },
- {
-  "fetch_from": "addon.default_price",
-  "fieldname": "price",
-  "fieldtype": "Currency", 
-  "label": "Price", 
-  "reqd": 1,
-  "read_only": 1 
-}
+  {
+   "fetch_from": "addon.default_price",
+   "fieldname": "price",
+   "fieldtype": "Currency",
+   "label": "Price",
+   "reqd": 1,
+   "read_only": 1
+  }
  ],
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2025-09-19 14:57:12.970335",
+ "modified": "2025-10-04 15:30:00.000000",
  "modified_by": "Administrator",
  "module": "Data Migration Tool",
  "name": "Product Addon",

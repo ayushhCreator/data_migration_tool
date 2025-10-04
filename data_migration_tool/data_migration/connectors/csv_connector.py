@@ -1112,7 +1112,7 @@ class CSVConnector:
         primary_id_value = None
         
         # Priority order for ID fields
-        id_priority = ['id', 'customer_id', 'supplier_id', 'email', 'name', 'code', 'reference', 'product_id']
+        id_priority = ['id', 'customer_id', 'supplier_id', 'email', 'name', 'code', 'reference', 'product_id', 'product_name']
         
         # Find the primary identifier first
         for csv_field, raw_value in raw_data.items():

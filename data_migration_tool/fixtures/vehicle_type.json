@@ -1,29 +1,52 @@
 [
  {
+  "vehicle_type_id": 1,
   "description": null,
   "docstatus": 0,
   "doctype": "Vehicle Type",
   "is_active": 1,
-  "modified": "2025-09-25 16:12:54.830797",
+  "modified": "2025-10-04 15:30:00.000000",
   "name": "HatchBack",
   "vehicle_name": "HatchBack"
  },
  {
+  "vehicle_type_id": 2,
   "description": null,
   "docstatus": 0,
   "doctype": "Vehicle Type",
   "is_active": 1,
-  "modified": "2025-09-25 16:12:54.839840",
+  "modified": "2025-10-04 15:30:00.000000",
   "name": "Sedan/SUV",
   "vehicle_name": "Sedan/SUV"
  },
  {
+  "vehicle_type_id": 3,
   "description": null,
   "docstatus": 0,
   "doctype": "Vehicle Type",
   "is_active": 1,
-  "modified": "2025-09-25 16:12:54.844519",
+  "modified": "2025-10-04 15:30:00.000000",
   "name": "Luxury",
   "vehicle_name": "Luxury"
+ },
+ {
+  "vehicle_type_id": 0,
+  "description": "Default vehicle type for unspecified vehicles",
+  "docstatus": 0,
+  "doctype": "Vehicle Type",
+  "is_active": 1,
+  "modified": "2025-10-04 15:30:00.000000",
+  "name": "Default",
+  "vehicle_name": "Default"
+ },
+ {
+  "vehicle_type_id": 4,
+  "description": "Premium luxury vehicles and sports cars",
+  "docstatus": 0,
+  "doctype": "Vehicle Type",
+  "is_active": 1,
+  "modified": "2025-10-04 15:30:00.000000",
+  "name": "Premium",
+  "vehicle_name": "Premium"
  }
 ]
