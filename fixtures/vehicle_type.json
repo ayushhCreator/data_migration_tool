@@ -1,6 +1,0 @@
-[
-    {"doctype": "Vehicle Type", "vehicle_name": "HatchBack", "description": "Small compact vehicles", "is_active": 1},
-    {"doctype": "Vehicle Type", "vehicle_name": "Sedan/SUV", "description": "Medium to large vehicles", "is_active": 1},
-    {"doctype": "Vehicle Type", "vehicle_name": "Luxury", "description": "Premium luxury vehicles", "is_active": 1},
-    {"doctype": "Vehicle Type", "vehicle_name": "General", "description": "General vehicle type", "is_active": 1}
-]

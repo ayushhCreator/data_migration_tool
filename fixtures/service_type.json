@@ -1,4 +1,0 @@
-[
-    {"doctype": "Service Type", "service_name": "One-time", "is_subscription": 0, "description": "Single service occurrence", "is_active": 1},
-    {"doctype": "Service Type", "service_name": "Subscription", "is_subscription": 1, "description": "Recurring subscription service", "is_active": 1}
-]

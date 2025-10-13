@@ -1103,20 +1103,34 @@ class CSVConnector:
 
 
     def apply_jit_conversion(self, raw_data: Dict[str, str], meta) -> Dict[str, Any]:
-        """Enhanced field mapping with proper error handling and variable initialization"""
+
+        """
+        Enhanced field mapping with EXACT MATCH priority for CSV imports.
+        FIXED: Properly handles empty vs non-empty values
+        """
         converted_data = {}
         available_fields = [f.fieldname for f in meta.fields]
+        
+        # Create case-insensitive field mapping for exact matches
+        field_mapping_lower = {}
+        field_meta_map = {}
+        
+        for field in meta.fields:
+            normalized_name = field.fieldname.lower().replace(' ', '_').replace('-', '_')
+            field_mapping_lower[normalized_name] = field.fieldname
+            field_meta_map[field.fieldname] = field
         
         # STEP 1: Initialize primary identifier tracking
         primary_id_field = None
         primary_id_value = None
         
-        # Priority order for ID fields
-        id_priority = ['id', 'customer_id', 'supplier_id', 'email', 'name', 'code', 'reference', 'product_id', 'product_name']
+        # Priority order for ID fields (for name generation)
+        id_priority = ['id', 'customer_id', 'supplier_id', 'email', 'code', 'reference', 'product_id', 'product_name']
         
-        # Find the primary identifier first
+        # Find the primary identifier first (for name generation)
         for csv_field, raw_value in raw_data.items():
-            if not raw_value or str(raw_value).strip() == '':
+            # FIXED: Check for None and empty string properly
+            if raw_value is None or (isinstance(raw_value, str) and raw_value.strip() == ''):
                 continue
                 
             clean_field = csv_field.lower().replace(' ', '_').replace('-', '_')
@@ -1132,48 +1146,55 @@ class CSVConnector:
             if primary_id_field:  # Stop searching once we find one
                 break
         
-        # STEP 2: Process all fields with generic pattern detection
+        # STEP 2: Process all fields with EXACT MATCH PRIORITY
         for csv_field, raw_value in raw_data.items():
-            if not raw_value or str(raw_value).strip() == '':
+            # FIXED: Proper empty check
+            if raw_value is None or (isinstance(raw_value, str) and raw_value.strip() == ''):
+                self.logger.logger.debug(f"⏭️ Skipping empty field '{csv_field}'")
                 continue
+            
+            # Normalize the CSV field name
+            csv_field_normalized = csv_field.strip().lower().replace(' ', '_').replace('-', '_')
+            
+            target_field = None
+            field_meta = None
+            
+            # PRIORITY 1: EXACT MATCH (case-insensitive)
+            if csv_field_normalized in field_mapping_lower:
+                target_field = field_mapping_lower[csv_field_normalized]
+                field_meta = field_meta_map.get(target_field)
+                self.logger.logger.debug(f"✓ Exact match: CSV '{csv_field}' (value='{raw_value}') → DocType '{target_field}'")
+            
+            # PRIORITY 2: Pattern-based detection (only if exact match fails)
+            if not target_field:
+                sample_values = [str(raw_value).strip()] if raw_value else []
+                detected_field = self.detect_field_patterns(csv_field, sample_values)
                 
-            clean_field = csv_field.lower().replace(' ', '_').replace('-', '_')
+                if detected_field and detected_field in available_fields:
+                    target_field = detected_field
+                    field_meta = field_meta_map.get(target_field)
+                    self.logger.logger.debug(f"⚠️ Pattern match: CSV '{csv_field}' → DocType '{target_field}'")
             
-            # Get sample values for this field (if available)
-            sample_values = [str(raw_value).strip()] if raw_value else []
-            
-            # Use pattern detection instead of hard-coded mapping
-            target_field = self.detect_field_patterns(csv_field, sample_values)
-            
-            # If target field doesn't exist in DocType, try to find similar field
-            if target_field not in available_fields:
-                similar_field = self._find_similar_field(target_field, available_fields)
+            # PRIORITY 3: Find similar field name
+            if not target_field:
+                similar_field = self._find_similar_field(csv_field_normalized, available_fields)
                 if similar_field:
                     target_field = similar_field
-                else:
-                    # Use cleaned field name as fallback
-                    target_field = re.sub(r'[^a-z0-9_]', '', clean_field)
-                    if not target_field:
-                        continue
+                    field_meta = field_meta_map.get(target_field)
+                    self.logger.logger.debug(f"⚠️ Similarity match: CSV '{csv_field}' → DocType '{target_field}'")
             
-            # Skip if target field still doesn't exist
-            if target_field not in available_fields:
-                self.logger.logger.debug(f"Field '{target_field}' not found in {meta.name}, skipping")
+            # Skip if no field mapping found
+            if not target_field or target_field not in available_fields:
+                self.logger.logger.debug(f"❌ No mapping found for CSV field '{csv_field}', skipping")
                 continue
             
-            # Find field metadata for type conversion
-            field_meta = None
-            for f in meta.fields:
-                if f.fieldname == target_field:
-                    field_meta = f
-                    break
-            
-            if field_meta is None:
-                self.logger.logger.debug(f"No metadata found for field '{target_field}', skipping")
+            # Skip if field metadata not found
+            if not field_meta:
+                self.logger.logger.debug(f"❌ No metadata found for field '{target_field}', skipping")
                 continue
             
-            # Handle primary identifier fields specially
-            if clean_field == primary_id_field:
+            # Handle primary identifier fields specially (for specific DocTypes)
+            if csv_field_normalized == primary_id_field:
                 if meta.name in ['Supplier', 'Customer', 'Contact', 'Lead']:
                     # For these DocTypes, use the ID as the record name
                     converted_data['name'] = self._generate_safe_name(raw_value, meta.name)
@@ -1183,17 +1204,22 @@ class CSVConnector:
                     # For other DocTypes, try to use as name if possible
                     converted_data['name'] = self._generate_safe_name(raw_value, meta.name)
             
-            # Convert and set the field value (skip name field to avoid duplication)
+            # Convert and set the field value (skip 'name' field to avoid duplication)
             if target_field != 'name':
                 try:
-                    self.current_field_name = clean_field
+                    self.current_field_name = csv_field_normalized
+                    # FIXED: Pass raw_value directly, not processed
                     converted_value = self._smart_type_conversion(raw_value, field_meta.fieldtype, field_meta)
                     
+                    # FIXED: Check for actual None, not empty string (empty string is valid!)
                     if converted_value is not None:
                         converted_data[target_field] = converted_value
+                        self.logger.logger.debug(f"✓ Converted: '{csv_field}' (raw='{raw_value}') → '{target_field}' = '{converted_value}'")
+                    else:
+                        self.logger.logger.warning(f"⚠️ Conversion returned None for '{csv_field}' (raw='{raw_value}')")
                         
                 except Exception as conversion_error:
-                    self.logger.logger.warning(f"Conversion error for field '{target_field}': {str(conversion_error)}")
+                    self.logger.logger.warning(f"⚠️ Conversion error for field '{target_field}': {str(conversion_error)}")
                     continue
         
         # STEP 3: Ensure we have a proper name field
@@ -1201,10 +1227,13 @@ class CSVConnector:
             if primary_id_value:
                 converted_data['name'] = self._generate_safe_name(primary_id_value, meta.name)
             else:
-                # Generate a fallback name if no ID found
+                # Generate a fallback name from available data
                 converted_data['name'] = self.generate_meaningful_name(converted_data, meta.name)
         
+        self.logger.logger.info(f"✓ Conversion complete: {len(converted_data)} fields mapped for {meta.name}")
+        self.logger.logger.debug(f"✓ Converted data: {converted_data}")
         return converted_data
+   
 
     def detect_field_patterns(self, field_name: str, sample_values: list) -> str:
         """Dynamic field detection using intelligent pattern matching and similarity scoring"""
@@ -1748,7 +1777,7 @@ class CSVConnector:
                 'detection_details': {
                     'best_match': detection_result.get('doctype'),
                     'confidence': detection_result.get('confidence', 0),
-                    'threshold_required': detection_result.get('confidence_threshold', 0.8),
+                    'threshold_required': detection_result.get('confidence_threshold', 0.7),
                     'reason_for_rejection': f"Best match confidence {detection_result.get('confidence', 0):.1%} is below required threshold {detection_result.get('confidence_threshold', 0.8):.1%}"
                 },
                 'requested_at': frappe.utils.now(),

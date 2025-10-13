@@ -1137,13 +1137,13 @@ class DynamicDocTypeCreator:
             """Get configurable confidence threshold from settings"""
             try:
                 if settings and hasattr(settings, 'doctype_match_threshold'):
-                    threshold = float(settings.doctype_match_threshold or 80) / 100
+                    threshold = float(settings.doctype_match_threshold or 60) / 100
                 else:
                     # Try to get from Migration Settings
                     migration_settings = frappe.get_single("Migration Settings")
-                    threshold = float(getattr(migration_settings, 'doctype_match_threshold', 80)) / 100
+                    threshold = float(getattr(migration_settings, 'doctype_match_threshold', 60)) / 100
 
                 # Ensure threshold is within reasonable bounds
                 return max(0.5, min(0.95, threshold))
             except:
-                return 0.8  # Default 80%
+                return 0.6  # Default 60%
