@@ -228,62 +228,69 @@ class FieldMapper:
     def _get_smart_pattern_mappings(self, csv_headers: List[str], target_doctype: str) -> Dict[str, str]:
         """Smart pattern-based mappings for future CSVs"""
 
-        mappings = {}
-        doctype_base = target_doctype.lower().replace(' ', '_')
+        mappings: Dict[str, str] = {}
 
-        # Pattern-based mappings
-        patterns = {
-            # ID patterns
-            rf'^{doctype_base}_id$': f'{doctype_base}_id',
-            rf'^{doctype_base}id$': f'{doctype_base}_id',
-            r'^.*_id$': lambda match: match.group(0),
-            r'^id$': 'name',
+        # Robust doctype base normalization (covers spaces, slashes, symbols)
+        doctype_base = re.sub(r'[^a-z0-9_]+', '_', target_doctype.lower()).strip('_')
 
-            # Name patterns  
-            rf'^{doctype_base}_name$': f'{doctype_base}_name',
-            rf'^{doctype_base}name$': f'{doctype_base}_name',
-            r'^.*_name$': lambda match: match.group(0),
-            r'^name$': 'name',
-            r'^title$': 'name',
+        # Build ordered pattern list (specific → generic) to prevent false matches
+        patterns = [
+            # ID patterns (specific → generic)
+            (re.compile(rf'^{doctype_base}_id$'), f'{doctype_base}_id'),
+            (re.compile(rf'^{doctype_base}id$'), f'{doctype_base}_id'),
+            (re.compile(r'^(.+)_id$'), lambda m: f"{m.group(1)}_id"),
+            (re.compile(r'^id$'), 'name'),
+
+            # Name patterns (specific → generic)
+            (re.compile(rf'^{doctype_base}_name$'), f'{doctype_base}_name'),
+            (re.compile(rf'^{doctype_base}name$'), f'{doctype_base}_name'),
+
+            # Yawlit/Service synonyms to avoid required-field misses
+            # e.g., "servicename", "service name", "service-type" -> "service_name"
+            (re.compile(r'^(service[_\s-]*name|servicename|service[\s-]*type)$'), 'service_name'),
+
+            (re.compile(r'^name$'), 'name'),
+            (re.compile(r'^title$'), 'name'),
+            (re.compile(r'^(.+)_name$'), lambda m: f"{m.group(1)}_name"),
 
             # Price patterns
-            r'^price$': 'price',
-            r'^cost$': 'price', 
-            r'^amount$': 'price',
-            r'^rate$': 'price',
-            r'^base_price$': 'base_price',
-            r'^unit_price$': 'price',
-            r'^default_price$': 'default_price',
-            r'^one_time_price$': 'one_time_price',
+            (re.compile(r'^base[_\s-]*price$'), 'base_price'),
+            (re.compile(r'^one[_\s-]*time[_\s-]*price$'), 'one_time_price'),
+            (re.compile(r'^unit[_\s-]*price$'), 'price'),
+            (re.compile(r'^default[_\s-]*price$'), 'default_price'),
+            (re.compile(r'^(price|cost|amount|rate)$'), 'price'),
 
             # Description patterns
-            r'^description$': 'description',
-            r'^desc$': 'description',
-            r'^details$': 'description',
-            r'^notes$': 'description',
-            r'^remarks$': 'description',
+            (re.compile(r'^(description|desc|details|notes|remarks)$'), 'description'),
 
             # Common business fields
-            r'^frequency$': 'frequency',
-            r'^status$': 'status',
-            r'^active$': 'is_active',
-            r'^is_active$': 'is_active',
-            r'^enabled$': 'is_active'
-        }
+            (re.compile(r'^frequency$'), 'frequency'),
+            (re.compile(r'^(active|is[_\s-]*active|enabled)$'), 'is_active'),
+            (re.compile(r'^status$'), 'status'),
+        ]
 
         for header in csv_headers:
-            clean_header = header.lower().replace(' ', '_').replace('-', '_')
+            # Normalize consistently with the rest of the mapper
+            clean_header = header.lower().replace(' ', '_').replace('-', '_').replace('.', '_')
 
-            for pattern, target_field in patterns.items():
-                match = re.match(pattern, clean_header)
-                if match:
-                    if callable(target_field):
-                        mappings[clean_header] = target_field(match)
-                    else:
-                        mappings[clean_header] = target_field
+            for pat, target_field in patterns:
+                m = pat.fullmatch(clean_header)
+                if m:
+                    mappings[clean_header] = target_field(m) if callable(target_field) else target_field
                     break
 
         return mappings
+
+    def _find_fuzzy_match(self, csv_field: str, mappings: Dict[str, str]) -> Optional[str]:
+        """Find fuzzy matches for field names"""
+
+        # Check if any mapping key contains the csv_field or vice versa
+        for mapping_key, mapping_value in mappings.items():
+            if (csv_field in mapping_key or mapping_key in csv_field or
+                self._fields_similar(csv_field, mapping_key)):
+                return mapping_value
+
+        return None
 
     def _find_fuzzy_match(self, csv_field: str, mappings: Dict[str, str]) -> Optional[str]:
         """Find fuzzy matches for field names"""

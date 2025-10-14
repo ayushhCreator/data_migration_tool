@@ -129,7 +129,6 @@ def get_pending_doctype_requests():
         return {"status": "error", "message": str(e)}
 
 @frappe.whitelist()
-@frappe.whitelist()
 def get_existing_doctypes(search_term=None, include_custom=True, include_standard=True):
     """ENHANCED: Get list of existing DocTypes for redirect option with comprehensive filtering"""
     try:

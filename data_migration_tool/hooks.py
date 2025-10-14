@@ -6,28 +6,38 @@ app_publisher = "Ayush Raj"
 app_description = "Migrate Data from different sources to Frappe/ERPNext"
 app_email = "araj09510@gmail.com"
 app_license = "mit"
-app_version = "0.1.0"  # Updated version
+app_version = "0.1.0"
+
+fixtures = []
+
 # Required for marketplace
 required_apps = ["frappe"]
 
-
+# Page JS configuration
 page_js = {
     "migration_dashboard": "public/js/migration_dashboard.js"
 }
+
+# App level JS includes
 app_include_js = [
     "assets/data_migration_tool/js/data_migration_tool.js",
     "assets/data_migration_tool/js/migration_notifications.js",
     "assets/data_migration_tool/js/doctype_creation_dialog.js"
 ]
+
+# App level CSS includes
 app_include_css = [
     "/assets/data_migration_tool/css/data_migration_tool.css",
-    "/assets/data_migration_tool/css/dashboard.css"  # Add this line
+    "/assets/data_migration_tool/css/dashboard.css"
 ]
+
+# DocType specific JS
 doctype_js = {
     "DocType Creation Request": "public/js/doctype_creation_request.js",
-    "Migration Settings": "public/js/migration_settings.js",
+    "Migration Settings": "public/js/migration_settings.js"
 }
 
+# Extend desk menu
 extend_desk_menu = [
     {
         "label": "Migration Dashboard",
@@ -36,9 +46,9 @@ extend_desk_menu = [
         "icon": "fa fa-dashboard"
     }
 ]
+
 # Document Events
-# ---------------
-ddoc_events = {
+doc_events = {
     "DocType Creation Request": {
         "on_update": "data_migration_tool.data_migration.utils.scheduler_tasks.on_doctype_request_update"
     },
@@ -46,8 +56,8 @@ ddoc_events = {
         "on_update": "data_migration_tool.data_migration.utils.scheduler_tasks.on_settings_update"
     }
 }
-# FIXED: Scheduled Tasks - Ensure CSV processing runs every 15 minutes
-# ---------------
+
+# Scheduled Tasks
 scheduler_events = {
     "cron": {
         "*/15 * * * *": [
@@ -58,7 +68,6 @@ scheduler_events = {
         ]
     }
 }
-
 
 # REST API whitelist
 api_methods = [
@@ -72,29 +81,11 @@ api_methods = [
     "data_migration_tool.data_migration.connectors.csv_connector.get_buffer_statistics",
     "data_migration_tool.data_migration.api.get_import_statistics",
     "data_migration_tool.data_migration.utils.scheduler_tasks.manual_csv_processing",
-       "data_migration_tool.data_migration_tool.page.migration_dashboard.migration_dashboard.get_dashboard_data",
+    "data_migration_tool.data_migration_tool.page.migration_dashboard.migration_dashboard.get_dashboard_data",
     "data_migration_tool.data_migration_tool.page.migration_dashboard.migration_dashboard.trigger_migration"
 ]
 
-# Fixtures for easy deployment
-fixtures = [
-       {
-        "dt": "Workspace",
-        "filters": [["name", "in", ["Data Migration"]]]
-    },
-    {
-        "dt": "Service Category",
-        "filters": [["name", "in", ["Wash", "Polishing", "Detailing", "Other Services"]]]
-    },
-    {
-        "dt": "Vehicle Type", 
-        "filters": [["name", "in", ["HatchBack", "Sedan/SUV", "Luxury", "General"]]]
-    },
-    {
-        "dt": "Service Type",
-        "filters": [["name", "in", ["One-time", "Subscription"]]]
-    }
-]
+
 
 # Background job events
 background_job_events = {
